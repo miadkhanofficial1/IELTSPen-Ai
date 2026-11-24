@@ -24,6 +24,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
     ],
     apple: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -59,6 +60,9 @@ export default function RootLayout({
     <html lang="en" className={`dark ${plusJakartaSans.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
+        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+        <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
       <body className="font-sans min-h-screen relative overflow-x-hidden transition-colors duration-300">
         <ThemeProvider>

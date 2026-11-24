@@ -1,0 +1,32 @@
+<svg width="216" height="216" viewBox="0 0 216 216" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ielts-red-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#EB2645" />
+      <stop offset="100%" stop-color="#D91130" />
+    </linearGradient>
+    <filter id="subtle-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- iOS Squircle Body (Crimson Red #E31837) -->
+  <rect width="216" height="216" rx="48" fill="url(#ielts-red-gradient)" />
+  <rect x="1" y="1" width="214" height="214" rx="47" stroke="rgba(255, 255, 255, 0.25)" stroke-width="2" fill="none" />
+
+  <!-- Centered White Extra-Bold IELTS Text -->
+  <text 
+    x="108" 
+    y="110" 
+    fill="#FFFFFF" 
+    font-family="'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+    font-size="52" 
+    font-weight="900" 
+    text-anchor="middle" 
+    dominant-baseline="central"
+    letter-spacing="-0.03em"
+    filter="url(#subtle-shadow)"
+  >IELTS</text>
+
+  <!-- Subtle White Dot in Bottom-Right Corner -->
+  <circle cx="166" cy="156" r="6.5" fill="#FFFFFF" opacity="0.95" />
+</svg>
