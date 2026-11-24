@@ -1,4 +1,5 @@
-import { query, execute } from "./db";
+import crypto from "crypto";
+import { query, queryOne, execute, parseJson } from "./db";
 
 export type AiProvider = "gemini" | "groq" | "openrouter" | "mistral";
 
@@ -27,6 +28,11 @@ export interface EvaluationResult {
   criteria_scores: CriteriaScores;
   corrections: CorrectionItem[];
   word_count: number;
+  study_takeaways?: {
+    vocabulary?: Array<{ title: string; content: string; native_explanation?: string }>;
+    grammar?: Array<{ title: string; content: string; native_explanation?: string }>;
+    tricks?: Array<{ title: string; content: string; native_explanation?: string }>;
+  };
 }
 
 export interface EvaluationRequest {
@@ -301,7 +307,30 @@ Output ONLY valid JSON strictly adhering to this schema:
         "${nativeLanguage}": "concise explanation in ${nativeLanguage}"
       }
     }
-  ]
+  ],
+  "study_takeaways": {
+    "vocabulary": [
+      {
+        "title": "Band 8+ Collocation or Word",
+        "content": "English definition and contextual IELTS example sentence",
+        "native_explanation": "how/why it works explained in ${nativeLanguage}"
+      }
+    ],
+    "grammar": [
+      {
+        "title": "Key Grammar Rule Name",
+        "content": "Concise English rule and correct example sentence",
+        "native_explanation": "how/why it works explained in ${nativeLanguage}"
+      }
+    ],
+    "tricks": [
+      {
+        "title": "Cambridge Exam Trick",
+        "content": "Actionable guideline in English",
+        "native_explanation": "how/why it works explained in ${nativeLanguage}"
+      }
+    ]
+  }
 }`;
 
   const userPrompt = `TASK TYPE: ${taskType.toUpperCase()}
@@ -322,6 +351,7 @@ ${essayText}`;
         overall_band: Number(parsed.overall_band) || 7.0,
         criteria_scores: parsed.criteria_scores,
         corrections: parsed.corrections || [],
+        study_takeaways: parsed.study_takeaways || undefined,
         word_count: wordCount,
       };
     } catch (err) {
@@ -610,6 +640,46 @@ function generateDeterministicEvaluation(
       grammar,
     },
     corrections: sampleCorrections,
+    study_takeaways: {
+      vocabulary: [
+        {
+          title: "Preeminent Driver",
+          content: "The primary or most important leading factor or cause.\nExample: 'Technology remains the preeminent driver of modern commercial globalization.'",
+          native_explanation:
+            nativeLanguage === "বাংলা (Bengali)"
+              ? "সবচেয়ে প্রধান বা অগ্রণী চালিকাশক্তি। কারণ বা প্রভাব বর্ণনায় উচ্চ-মানের শব্দ।"
+              : "The primary or leading factor driving change.",
+        },
+        {
+          title: "Subdued Ascent",
+          content: "A modest, slow, or restrained rise in statistical trends.\nExample: 'Public sector investments registered a subdued ascent of merely 3%.'",
+          native_explanation:
+            nativeLanguage === "বাংলা (Bengali)"
+              ? "খুব মৃদু বা ধীরগতির উত্থান। তীব্র বৃদ্ধির বিপরীতে তুলনামূলক বাক্য রচনায় কার্যকর।"
+              : "A modest or slow increase over time.",
+        },
+      ],
+      grammar: [
+        {
+          title: "Inversion with Correlative Conjunctions",
+          content: "Placing negative or correlative expressions at the beginning for stylistic emphasis.\nExample: 'Not only did commercial allocation surge, but residential adoption also accelerated exponentially.'",
+          native_explanation:
+            nativeLanguage === "বাংলা (Bengali)"
+              ? "বাক্যে জোর দেওয়ার জন্য Not only বাক্যের শুরুতে বসালে প্রশ্নবোধক বাক্যের মতো সাহায্যকারী Verb আগে আসে।"
+              : "Using negative or correlative markers with inverted word order for Band 8+ range.",
+        },
+      ],
+      tricks: [
+        {
+          title: "The Overarching Macro Rule",
+          content: "In Task 1, report general trajectories without quoting exact raw figures in the Overview paragraph.",
+          native_explanation:
+            nativeLanguage === "বাংলা (Bengali)"
+              ? "ওভারভিউতে কাঁচা সংখ্যা ছাড়াই সামগ্রিক গতিবিধি লিখলে সর্বোচ্চ Task Achievement নম্বর পাওয়া যায়।"
+              : "Report overarching trends without citing data numbers in the Task 1 overview.",
+        },
+      ],
+    },
     word_count: wordCount,
   };
 }
@@ -650,3 +720,142 @@ export async function translateExplanation(
 
   return fallbackTranslations[targetLanguage] || explanationEn;
 }
+
+/**
+ * Auto-Harvesting & Strict Deduplication of Study Takeaways from Completed Tests
+ */
+export async function harvestAndSaveStudyAssets(params: {
+  userId: string;
+  taskId?: string;
+  submissionId?: string;
+  takeaways?: {
+    vocabulary?: Array<{ title: string; content: string; native_explanation?: string }>;
+    grammar?: Array<{ title: string; content: string; native_explanation?: string }>;
+    tricks?: Array<{ title: string; content: string; native_explanation?: string }>;
+  };
+  corrections?: CorrectionItem[];
+  nativeLanguage: string;
+}) {
+  const { userId, taskId, submissionId, takeaways, corrections, nativeLanguage } = params;
+
+  const itemsToProcess: Array<{
+    asset_type: "vocabulary" | "grammar" | "trick";
+    category: string;
+    title_en: string;
+    content_en: string;
+    native_explanation: string;
+  }> = [];
+
+  if (takeaways?.vocabulary && Array.isArray(takeaways.vocabulary)) {
+    for (const v of takeaways.vocabulary) {
+      if (v.title && v.content) {
+        itemsToProcess.push({
+          asset_type: "vocabulary",
+          category: "Exam Vocabulary",
+          title_en: v.title.trim(),
+          content_en: v.content.trim(),
+          native_explanation: v.native_explanation?.trim() || "",
+        });
+      }
+    }
+  }
+
+  if (takeaways?.grammar && Array.isArray(takeaways.grammar)) {
+    for (const g of takeaways.grammar) {
+      if (g.title && g.content) {
+        itemsToProcess.push({
+          asset_type: "grammar",
+          category: "Grammar Master Rule",
+          title_en: g.title.trim(),
+          content_en: g.content.trim(),
+          native_explanation: g.native_explanation?.trim() || "",
+        });
+      }
+    }
+  }
+
+  if (takeaways?.tricks && Array.isArray(takeaways.tricks)) {
+    for (const t of takeaways.tricks) {
+      if (t.title && t.content) {
+        itemsToProcess.push({
+          asset_type: "trick",
+          category: "Cambridge Examiner Secret",
+          title_en: t.title.trim(),
+          content_en: t.content.trim(),
+          native_explanation: t.native_explanation?.trim() || "",
+        });
+      }
+    }
+  }
+
+  // If takeaways were empty, fallback to extracting high-yield takeaways from corrections
+  if (itemsToProcess.length === 0 && corrections && Array.isArray(corrections)) {
+    for (let i = 0; i < Math.min(corrections.length, 3); i++) {
+      const c = corrections[i];
+      if (c.improved && c.explanation_en) {
+        itemsToProcess.push({
+          asset_type: i === 0 ? "grammar" : i === 1 ? "vocabulary" : "trick",
+          category: i === 0 ? "Grammatical Accuracy" : i === 1 ? "Lexical Resource" : "Writing Strategy",
+          title_en: c.improved.slice(0, 50),
+          content_en: `Original: "${c.original}"\nImproved: "${c.improved}"\nRule: ${c.explanation_en}`,
+          native_explanation: c.localized_explanations?.[nativeLanguage] || c.explanation_native || "",
+        });
+      }
+    }
+  }
+
+  // Strict Deduplication & Safe Insert
+  for (const item of itemsToProcess) {
+    try {
+      const existing = await queryOne<{ id: string; translations: any }>(
+        `SELECT id, translations FROM student_study_assets 
+         WHERE (user_id = ? OR user_id IS NULL) 
+           AND asset_type = ? 
+           AND LOWER(title_en) = LOWER(?)
+         LIMIT 1`,
+        [userId, item.asset_type, item.title_en]
+      );
+
+      if (existing) {
+        // Strict Deduplication: Do NOT duplicate. Merge native translation if new.
+        if (nativeLanguage && nativeLanguage !== "English" && item.native_explanation) {
+          const currentTranslations = parseJson<Record<string, string>>(existing.translations, {});
+          if (!currentTranslations[nativeLanguage]) {
+            currentTranslations[nativeLanguage] = item.native_explanation;
+            await execute(
+              "UPDATE student_study_assets SET translations = ? WHERE id = ?",
+              [JSON.stringify(currentTranslations), existing.id]
+            );
+          }
+        }
+      } else {
+        const id = crypto.randomUUID();
+        const translationsObj: Record<string, string> = {};
+        if (nativeLanguage && nativeLanguage !== "English" && item.native_explanation) {
+          translationsObj[nativeLanguage] = item.native_explanation;
+        }
+
+        await execute(
+          `INSERT INTO student_study_assets (id, user_id, task_id, submission_id, asset_type, category, title_en, content_en, explanation_native, native_language, translations, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            id,
+            userId,
+            taskId || null,
+            submissionId || null,
+            item.asset_type,
+            item.category,
+            item.title_en,
+            item.content_en,
+            item.native_explanation || null,
+            nativeLanguage,
+            JSON.stringify(translationsObj),
+          ]
+        );
+      }
+    } catch (err) {
+      console.warn("Failed to harvest study asset item:", err);
+    }
+  }
+}
+

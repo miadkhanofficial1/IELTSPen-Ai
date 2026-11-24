@@ -123,3 +123,36 @@ export interface UnlockAppeal {
   user_merit?: number;
   user_locked_until?: string | null;
 }
+
+export interface FreeAssetFile {
+  id: string;
+  title: string;
+  category: string;
+  description?: string | null;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  file_url: string;
+  file_data?: string | null;
+  created_at: string;
+}
+
+export type StudyAssetType = "vocabulary" | "grammar" | "trick";
+
+export interface StudyAsset {
+  id: string;
+  user_id?: string | null;
+  task_id?: string | null;
+  submission_id?: string | null;
+  asset_type: StudyAssetType;
+  category: string;
+  title_en: string;
+  content_en: string;
+  example_en?: string | null;
+  explanation_en?: string | null;
+  explanation_native?: string | null;
+  native_language?: string | null;
+  translations?: Record<string, string> | null;
+  display_explanation?: string;
+  created_at: string;
+}

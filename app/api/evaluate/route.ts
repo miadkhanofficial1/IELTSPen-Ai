@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import crypto from "crypto";
 import { getServerSession } from "@/lib/auth";
 import { queryOne, execute } from "@/lib/db";
-import { evaluateIELTSEssay } from "@/lib/ai-engine";
+import { evaluateIELTSEssay, harvestAndSaveStudyAssets } from "@/lib/ai-engine";
 
 export async function POST(request: NextRequest) {
   try {
@@ -110,6 +110,20 @@ export async function POST(request: NextRequest) {
         JSON.stringify(evaluation.corrections),
       ]
     );
+
+    // 4. Auto-Harvest & Deduplicate Study Takeaways (Vocabulary, Grammar, Tricks) into student_study_assets
+    try {
+      await harvestAndSaveStudyAssets({
+        userId: session.userId,
+        taskId,
+        submissionId,
+        takeaways: evaluation.study_takeaways,
+        corrections: evaluation.corrections,
+        nativeLanguage: nativeLanguage || session.nativeLanguage || "English",
+      });
+    } catch (harvestErr) {
+      console.warn("Notice: Failed to auto-harvest study assets:", harvestErr);
+    }
 
     return NextResponse.json({
       success: true,

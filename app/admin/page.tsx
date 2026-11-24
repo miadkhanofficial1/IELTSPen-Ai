@@ -46,6 +46,12 @@ import {
   FilePlus,
   X,
   Layers,
+  FolderDown,
+  Download,
+  Eye,
+  FileUp,
+  File,
+  Upload,
 } from "lucide-react";
 import {
   WritingTask,
@@ -53,6 +59,7 @@ import {
   UnlockAppeal,
   AiApiKeyRecord as AiApiKey,
   AiProvider,
+  FreeAssetFile,
 } from "@/lib/types";
 
 export default function AdminDashboardPage() {
@@ -61,8 +68,18 @@ export default function AdminDashboardPage() {
 
   // Active admin tab
   const [activeTab, setActiveTab] = useState<
-    "overview" | "content" | "appeals" | "students" | "settings"
+    "overview" | "content" | "assets" | "appeals" | "students" | "settings"
   >("overview");
+
+  // Free Assets Manager State
+  const [assetFiles, setAssetFiles] = useState<FreeAssetFile[]>([]);
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState<string>("all");
+  const [isUploadingAsset, setIsUploadingAsset] = useState<boolean>(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState<string>("");
+  const [uploadCategory, setUploadCategory] = useState<string>("Cheat Sheet");
+  const [uploadDescription, setUploadDescription] = useState<string>("");
+  const [previewAssetFile, setPreviewAssetFile] = useState<FreeAssetFile | null>(null);
 
   // Admin user state
   const [adminUser, setAdminUser] = useState<any>(null);
@@ -231,6 +248,17 @@ export default function AdminDashboardPage() {
         }
         if (data.stats && typeof data.stats.todayEvaluations === "number") {
           setTodaySubmissionsCount(data.stats.todayEvaluations);
+        }
+
+        // Load free asset files
+        try {
+          const assetRes = await fetch("/api/admin/assets");
+          if (assetRes.ok) {
+            const assetData = await assetRes.json();
+            if (assetData.files) setAssetFiles(assetData.files);
+          }
+        } catch (e) {
+          console.warn("Could not load asset files:", e);
         }
       } catch (err) {
         console.error("Error loading admin data:", err);
@@ -610,6 +638,74 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // 12. Action: Upload Study Asset File
+  const handleUploadAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) {
+      alert("Please select a study file to upload (PDF, JPG, PNG, WEBP).");
+      return;
+    }
+    if (!uploadTitle.trim()) {
+      alert("Please enter a title for this asset.");
+      return;
+    }
+
+    setIsUploadingAsset(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      formData.append("title", uploadTitle.trim());
+      formData.append("category", uploadCategory.trim());
+      formData.append("description", uploadDescription.trim());
+
+      const res = await fetch("/api/admin/assets", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setAssetFiles((prev) => [data.asset, ...prev]);
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadDescription("");
+      alert("Study asset uploaded successfully!");
+    } catch (err: any) {
+      alert(err.message || "Failed to upload study asset.");
+    } finally {
+      setIsUploadingAsset(false);
+    }
+  };
+
+  // 13. Action: Delete Study Asset File
+  const handleDeleteAsset = async (assetId: string) => {
+    if (!window.confirm("Are you sure you want to delete this study file?")) return;
+    try {
+      const res = await fetch("/api/admin/assets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId }),
+      });
+
+      if (!res.ok) throw new Error("Failed to delete asset.");
+      setAssetFiles((prev) => prev.filter((a) => a.id !== assetId));
+      if (previewAssetFile?.id === assetId) setPreviewAssetFile(null);
+    } catch (err) {
+      alert("Failed to delete asset.");
+    }
+  };
+
+  // Filtered Asset Files
+  const filteredAssetFiles = useMemo(() => {
+    if (assetCategoryFilter === "all") return assetFiles;
+    return assetFiles.filter(
+      (a) => a.category.toLowerCase() === assetCategoryFilter.toLowerCase()
+    );
+  }, [assetFiles, assetCategoryFilter]);
+
   // Filtered Students
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
@@ -649,6 +745,12 @@ export default function AdminDashboardPage() {
             {[
               { id: "overview", label: "Overview", icon: LayoutDashboard },
               { id: "content", label: "AI Content Studio", icon: Sparkles },
+              {
+                id: "assets",
+                label: "Free Assets",
+                icon: FolderDown,
+                badge: assetFiles.length > 0 ? assetFiles.length : undefined,
+              },
               {
                 id: "appeals",
                 label: "Unlock Appeals",
@@ -1330,6 +1432,350 @@ export default function AdminDashboardPage() {
                           </>
                         )}
                       </motion.button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* TAB: FREE ASSETS MANAGER */}
+        {activeTab === "assets" && (
+          <div className="space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight flex items-center gap-2.5">
+                  <FolderDown className="w-7 h-7 text-accent" />
+                  <span>Free Assets Manager</span>
+                </h1>
+                <p className="text-xs sm:text-sm text-muted mt-0.5">
+                  Upload authentic Cambridge cheat sheets, Band 9 books, and chart guides for students.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-accent/10 text-accent border border-accent/20">
+                  {assetFiles.length} Total Materials
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="glass-card rounded-2xl p-4 border border-border">
+                <span className="text-[11px] font-medium text-muted block">Total Files</span>
+                <span className="text-xl font-extrabold font-heading text-foreground mt-0.5 block">
+                  {assetFiles.length}
+                </span>
+              </div>
+              <div className="glass-card rounded-2xl p-4 border border-border">
+                <span className="text-[11px] font-medium text-muted block">PDF Documents</span>
+                <span className="text-xl font-extrabold font-heading text-red-500 mt-0.5 block">
+                  {assetFiles.filter((f) => f.file_type.includes("pdf") || f.file_name.endsWith(".pdf")).length}
+                </span>
+              </div>
+              <div className="glass-card rounded-2xl p-4 border border-border">
+                <span className="text-[11px] font-medium text-muted block">Visual Charts / Images</span>
+                <span className="text-xl font-extrabold font-heading text-emerald-500 mt-0.5 block">
+                  {assetFiles.filter((f) => f.file_type.startsWith("image/") || !f.file_name.endsWith(".pdf")).length}
+                </span>
+              </div>
+              <div className="glass-card rounded-2xl p-4 border border-border">
+                <span className="text-[11px] font-medium text-muted block">Categories</span>
+                <span className="text-xl font-extrabold font-heading text-purple-500 mt-0.5 block">
+                  {new Set(assetFiles.map((f) => f.category)).size}
+                </span>
+              </div>
+            </div>
+
+            {/* File Upload Form */}
+            <div className="glass-card rounded-3xl p-6 border border-border space-y-5">
+              <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
+                <FileUp className="w-4 h-4 text-accent" />
+                <span>Upload New Study Material</span>
+              </h2>
+
+              <form onSubmit={handleUploadAsset} className="space-y-4 text-xs">
+                {/* File Dropzone / Selector */}
+                <div className="border-2 border-dashed border-border rounded-2xl p-6 text-center hover:border-accent/50 transition-colors bg-surfaceSecondary/30">
+                  <input
+                    type="file"
+                    id="asset-file-input"
+                    accept=".pdf, .jpg, .jpeg, .png, .webp"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setUploadFile(file);
+                        if (!uploadTitle.trim()) {
+                          const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+                          setUploadTitle(cleanName);
+                        }
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="asset-file-input"
+                    className="cursor-pointer flex flex-col items-center justify-center gap-2"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent flex items-center justify-center">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    {uploadFile ? (
+                      <div>
+                        <span className="font-bold text-foreground text-sm block">
+                          {uploadFile.name}
+                        </span>
+                        <span className="text-[11px] text-muted">
+                          {(uploadFile.size / 1024 / 1024).toFixed(2)} MB &bull; {uploadFile.type || "Selected File"}
+                        </span>
+                        <span className="text-[11px] text-accent block mt-1 underline">
+                          Click to choose another file
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="font-bold text-foreground text-sm block">
+                          Choose or drop a study file here
+                        </span>
+                        <span className="text-[11px] text-muted">
+                          Supports PDF, JPG, PNG, WEBP (Max 15MB)
+                        </span>
+                      </div>
+                    )}
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Asset Title */}
+                  <div>
+                    <label className="block font-semibold text-foreground mb-1.5">
+                      Asset Title *
+                    </label>
+                    <input
+                      type="text"
+                      value={uploadTitle}
+                      onChange={(e) => setUploadTitle(e.target.value)}
+                      placeholder="e.g., Cambridge Band 9 Academic Writing Blueprint"
+                      className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground"
+                    />
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <label className="block font-semibold text-foreground mb-1.5">
+                      Category
+                    </label>
+                    <select
+                      value={uploadCategory}
+                      onChange={(e) => setUploadCategory(e.target.value)}
+                      className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground cursor-pointer"
+                    >
+                      <option value="Cheat Sheet">Cheat Sheet</option>
+                      <option value="Band 9 Essays">Band 9 Essays</option>
+                      <option value="Chart Templates">Chart Templates</option>
+                      <option value="Grammar Guide">Grammar Guide</option>
+                      <option value="Vocabulary Bank">Vocabulary Bank</option>
+                      <option value="General Resource">General Resource</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block font-semibold text-foreground mb-1.5">
+                    Description <span className="text-muted font-normal">(Optional context for students)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={uploadDescription}
+                    onChange={(e) => setUploadDescription(e.target.value)}
+                    placeholder="Brief summary of what students will learn from this study file..."
+                    className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground"
+                  />
+                </div>
+
+                <motion.button
+                  {...tactileButton}
+                  type="submit"
+                  disabled={isUploadingAsset || !uploadFile || !uploadTitle.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-[#E31837] text-white font-semibold text-xs shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {isUploadingAsset ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Uploading Study Material...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Upload &amp; Publish for Students</span>
+                    </>
+                  )}
+                </motion.button>
+              </form>
+            </div>
+
+            {/* Uploaded Materials Library */}
+            <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h2 className="text-base font-bold font-heading text-foreground">
+                  Published Study Materials ({filteredAssetFiles.length})
+                </h2>
+
+                {/* Category Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  {["all", "Cheat Sheet", "Band 9 Essays", "Chart Templates", "Vocabulary Bank", "Grammar Guide"].map(
+                    (cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setAssetCategoryFilter(cat)}
+                        className={`px-3 py-1 rounded-xl font-semibold text-[11px] transition-colors ${
+                          assetCategoryFilter.toLowerCase() === cat.toLowerCase()
+                            ? "bg-[#E31837] text-white shadow-sm"
+                            : "glass-pill text-muted hover:text-foreground"
+                        }`}
+                      >
+                        {cat === "all" ? "All Categories" : cat}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {filteredAssetFiles.length === 0 ? (
+                <div className="text-center py-10 text-muted text-xs">
+                  No study materials found for this category. Upload one above!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredAssetFiles.map((file) => {
+                    const isPdf = file.file_type.includes("pdf") || file.file_name.endsWith(".pdf");
+                    return (
+                      <div
+                        key={file.id}
+                        className="p-4 rounded-2xl glass-panel border border-border flex flex-col justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                isPdf ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500"
+                              }`}
+                            >
+                              {isPdf ? "PDF Document" : "Visual Image"}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-surfaceSecondary text-muted">
+                              {file.category}
+                            </span>
+                          </div>
+
+                          <h3 className="font-bold text-sm font-heading text-foreground line-clamp-1">
+                            {file.title}
+                          </h3>
+
+                          {file.description && (
+                            <p className="text-[11px] text-muted line-clamp-2 leading-relaxed">
+                              {file.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="pt-3 border-t border-border flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-muted">
+                            {(file.file_size / 1024).toFixed(0)} KB &bull; {new Date(file.created_at).toLocaleDateString()}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setPreviewAssetFile(file)}
+                              className="px-2.5 py-1 rounded-lg glass-pill font-semibold text-[11px] text-foreground hover:bg-surfaceSecondary flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-accent" />
+                              <span>Preview</span>
+                            </button>
+
+                            <a
+                              href={`${file.file_url}?download=1`}
+                              download={file.file_name}
+                              className="px-2.5 py-1 rounded-lg glass-pill font-semibold text-[11px] text-foreground hover:bg-surfaceSecondary flex items-center gap-1"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download</span>
+                            </a>
+
+                            <button
+                              onClick={() => handleDeleteAsset(file.id)}
+                              className="p-1.5 rounded-lg text-muted hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* In-App Viewer Modal */}
+            <AnimatePresence>
+              {previewAssetFile && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    transition={iosSpring}
+                    className="glass-card w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl overflow-hidden bg-surface/95 backdrop-blur-xl"
+                  >
+                    {/* Header */}
+                    <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between shrink-0">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-accent block">
+                          {previewAssetFile.category}
+                        </span>
+                        <h2 className="text-base font-bold font-heading text-foreground">
+                          {previewAssetFile.title}
+                        </h2>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`${previewAssetFile.file_url}?download=1`}
+                          download={previewAssetFile.file_name}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#E31837] text-white font-semibold text-xs shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-1.5"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </a>
+
+                        <button
+                          onClick={() => setPreviewAssetFile(null)}
+                          className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surfaceSecondary"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content View */}
+                    <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/10">
+                      {previewAssetFile.file_type.includes("pdf") || previewAssetFile.file_name.endsWith(".pdf") ? (
+                        <iframe
+                          src={previewAssetFile.file_url}
+                          className="w-full h-[72vh] rounded-2xl border border-border bg-white"
+                          title={previewAssetFile.title}
+                        />
+                      ) : (
+                        <img
+                          src={previewAssetFile.file_url}
+                          alt={previewAssetFile.title}
+                          className="max-h-[72vh] max-w-full object-contain rounded-2xl shadow-lg mx-auto"
+                        />
+                      )}
                     </div>
                   </motion.div>
                 </div>

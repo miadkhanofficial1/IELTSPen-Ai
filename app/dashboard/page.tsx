@@ -36,9 +36,15 @@ import {
   Send,
   Loader2,
   Info,
+  FolderDown,
+  Download,
+  Eye,
+  Lightbulb,
+  File,
+  X,
 } from "lucide-react";
 import EvaluationReviewModal from "@/components/results/EvaluationReviewModal";
-import { WritingTask, Submission } from "@/lib/types";
+import { WritingTask, Submission, FreeAssetFile, StudyAsset } from "@/lib/types";
 
 const NATIVE_LANGUAGES = [
   "English",
@@ -94,6 +100,34 @@ export default function StudentDashboard() {
   // Countdown timer for 15-minute lockdown
   const [remainingLockSeconds, setRemainingLockSeconds] = useState<number>(0);
 
+  // Free Assets & Study Takeaways state
+  const [assetSubTab, setAssetSubTab] = useState<"files" | "vocabulary" | "grammar" | "tricks">("files");
+  const [freeAssetFiles, setFreeAssetFiles] = useState<FreeAssetFile[]>([]);
+  const [studyVocabulary, setStudyVocabulary] = useState<StudyAsset[]>([]);
+  const [studyGrammar, setStudyGrammar] = useState<StudyAsset[]>([]);
+  const [studyTricks, setStudyTricks] = useState<StudyAsset[]>([]);
+  const [isLoadingStudyAssets, setIsLoadingStudyAssets] = useState<boolean>(false);
+  const [viewerFile, setViewerFile] = useState<FreeAssetFile | null>(null);
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState<string>("all");
+
+  const loadStudyAssets = async (lang: string) => {
+    setIsLoadingStudyAssets(true);
+    try {
+      const res = await fetch(`/api/student/study-assets?lang=${encodeURIComponent(lang)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files) setFreeAssetFiles(data.files);
+        if (data.vocabulary) setStudyVocabulary(data.vocabulary);
+        if (data.grammar) setStudyGrammar(data.grammar);
+        if (data.tricks) setStudyTricks(data.tricks);
+      }
+    } catch (err) {
+      console.warn("Failed to load study assets:", err);
+    } finally {
+      setIsLoadingStudyAssets(false);
+    }
+  };
+
   // Initialize and load data
   useEffect(() => {
     async function loadDashboardData() {
@@ -126,6 +160,9 @@ export default function StudentDashboard() {
         if (data.submissions) {
           setSubmissions(data.submissions);
         }
+
+        // Load study assets and files
+        loadStudyAssets(data.profile?.native_language || "English");
       } catch (err) {
         console.error("Dashboard data load error:", err);
       } finally {
@@ -188,6 +225,7 @@ export default function StudentDashboard() {
   // Update native language
   const handleLanguageChange = async (newLang: string) => {
     setNativeLanguage(newLang);
+    loadStudyAssets(newLang);
     if (!userId) return;
     try {
       await fetch("/api/student/dashboard-data", {
@@ -289,6 +327,29 @@ export default function StudentDashboard() {
     });
     return Array.from(map.values());
   }, [tasks]);
+
+  // Format bytes to human readable string
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  // Categories for free asset files
+  const fileCategories = useMemo(() => {
+    const cats = new Set<string>();
+    freeAssetFiles.forEach((f) => {
+      if (f.category) cats.add(f.category);
+    });
+    return ["all", ...Array.from(cats)];
+  }, [freeAssetFiles]);
+
+  // Filtered free asset files
+  const filteredFiles = useMemo(() => {
+    if (assetCategoryFilter === "all") return freeAssetFiles;
+    return freeAssetFiles.filter((f) => f.category === assetCategoryFilter);
+  }, [freeAssetFiles, assetCategoryFilter]);
 
   return (
     <div className="min-h-screen flex flex-col justify-between selection:bg-accent/20 selection:text-accent">
@@ -623,11 +684,460 @@ export default function StudentDashboard() {
           </div>
         )}
 
-        {/* TAB 3: FREE ASSETS (Auto-Synced Topic Vocabulary & Structures) */}
+        {/* TAB 3: FREE ASSETS & BILINGUAL STUDY TAKEAWAYS */}
         {activeTab === "assets" && (
           <div className="space-y-8">
-            {/* IELTS Essay Structures (Static Guides) */}
-            <div>
+            {/* Header with Language Indicator */}
+            <div className="glass-card rounded-3xl p-6 sm:p-8 border border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent/10 text-accent border border-accent/20">
+                    Band 9 Knowledge Base
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-surfaceSecondary text-muted border border-border flex items-center gap-1">
+                    <Languages className="w-3 h-3 text-accent" />
+                    <span>{nativeLanguage}</span>
+                  </span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-extrabold font-heading text-foreground">
+                  Free Assets & Study Takeaways
+                </h1>
+                <p className="text-xs sm:text-sm text-muted mt-1 max-w-2xl leading-relaxed">
+                  Curated Band 9 cheat sheets, PDF guides, and auto-harvested takeaways from your evaluations translated into {nativeLanguage}.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                <button
+                  onClick={() => loadStudyAssets(nativeLanguage)}
+                  disabled={isLoadingStudyAssets}
+                  className="px-3.5 py-2 rounded-xl bg-surfaceSecondary hover:bg-border text-foreground text-xs font-semibold border border-border transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  title="Refresh study takeaways"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isLoadingStudyAssets ? "animate-spin text-accent" : ""}`} />
+                  <span>Sync Assets</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 iOS Segmented Sub-Tabs */}
+            <div className="flex items-center gap-1.5 p-1.5 rounded-2xl glass-card border border-border max-w-2xl overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => setAssetSubTab("files")}
+                className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  assetSubTab === "files"
+                    ? "bg-accent text-white shadow-md shadow-accent/25"
+                    : "text-muted hover:text-foreground hover:bg-surfaceSecondary/50"
+                }`}
+              >
+                <FolderDown className="w-3.5 h-3.5" />
+                <span>Files & PDFs</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  assetSubTab === "files" ? "bg-white/20 text-white" : "bg-surfaceSecondary text-muted"
+                }`}>
+                  {freeAssetFiles.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setAssetSubTab("vocabulary")}
+                className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  assetSubTab === "vocabulary"
+                    ? "bg-accent text-white shadow-md shadow-accent/25"
+                    : "text-muted hover:text-foreground hover:bg-surfaceSecondary/50"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Vocabulary</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  assetSubTab === "vocabulary" ? "bg-white/20 text-white" : "bg-surfaceSecondary text-muted"
+                }`}>
+                  {studyVocabulary.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setAssetSubTab("grammar")}
+                className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  assetSubTab === "grammar"
+                    ? "bg-accent text-white shadow-md shadow-accent/25"
+                    : "text-muted hover:text-foreground hover:bg-surfaceSecondary/50"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Grammar</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  assetSubTab === "grammar" ? "bg-white/20 text-white" : "bg-surfaceSecondary text-muted"
+                }`}>
+                  {studyGrammar.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setAssetSubTab("tricks")}
+                className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  assetSubTab === "tricks"
+                    ? "bg-accent text-white shadow-md shadow-accent/25"
+                    : "text-muted hover:text-foreground hover:bg-surfaceSecondary/50"
+                }`}
+              >
+                <Lightbulb className="w-3.5 h-3.5" />
+                <span>Exam Tricks</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  assetSubTab === "tricks" ? "bg-white/20 text-white" : "bg-surfaceSecondary text-muted"
+                }`}>
+                  {studyTricks.length}
+                </span>
+              </button>
+            </div>
+
+            {/* SUB-TAB 1: FILES & PDFS */}
+            {assetSubTab === "files" && (
+              <div className="space-y-6">
+                {/* Category Filter Pills */}
+                {fileCategories.length > 1 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {fileCategories.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setAssetCategoryFilter(cat)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all capitalize ${
+                          assetCategoryFilter === cat
+                            ? "bg-foreground text-background shadow-sm"
+                            : "bg-surfaceSecondary/80 text-muted hover:text-foreground border border-border"
+                        }`}
+                      >
+                        {cat === "all" ? "All Files" : cat.replace(/_/g, " ")}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* File Grid */}
+                {filteredFiles.length === 0 ? (
+                  <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-surfaceSecondary flex items-center justify-center text-muted mb-3">
+                      <FolderDown className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold font-heading text-sm text-foreground">
+                      No study files published yet
+                    </h3>
+                    <p className="text-xs text-muted max-w-sm mt-1">
+                      Check back soon — our educators and examiners publish Cambridge cheat sheets, model essays, and chart guides regularly.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className="glass-card rounded-2xl p-5 border border-border hover:border-accent/40 transition-all flex flex-col justify-between group shadow-sm"
+                      >
+                        <div>
+                          {/* File Type & Category */}
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                file.file_type === "pdf"
+                                  ? "bg-[#E31837]/10 text-[#E31837] border border-[#E31837]/20"
+                                  : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                              }`}
+                            >
+                              {file.file_type === "pdf" ? (
+                                <FileText className="w-3 h-3" />
+                              ) : (
+                                <Eye className="w-3 h-3" />
+                              )}
+                              <span>{file.file_type}</span>
+                            </span>
+
+                            {file.category && (
+                              <span className="text-[11px] text-muted capitalize truncate">
+                                {file.category.replace(/_/g, " ")}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Title & Description */}
+                          <h3 className="font-bold font-heading text-sm text-foreground group-hover:text-accent transition-colors line-clamp-1">
+                            {file.title}
+                          </h3>
+                          <p className="text-xs text-muted mt-1.5 line-clamp-2 min-h-[32px] leading-relaxed">
+                            {file.description || "Official IELTS preparation resource published by IELTSPen Ai."}
+                          </p>
+                        </div>
+
+                        {/* Metadata & Actions */}
+                        <div className="mt-4 pt-3 border-t border-border/60">
+                          <div className="flex items-center justify-between text-[11px] text-muted mb-3 font-mono">
+                            <span className="truncate max-w-[140px]">{file.file_name}</span>
+                            <span>{formatFileSize(file.file_size)}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setViewerFile(file)}
+                              className="flex-1 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent font-semibold text-xs border border-accent/20 transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View</span>
+                            </button>
+
+                            <a
+                              href={`${file.file_url}?download=1`}
+                              download={file.file_name}
+                              className="px-3.5 py-2 rounded-xl bg-surfaceSecondary hover:bg-border text-foreground text-xs font-semibold border border-border transition-all flex items-center justify-center gap-1.5"
+                              title="Download to device"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Save</span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 2: VOCABULARY */}
+            {assetSubTab === "vocabulary" && (
+              <div className="space-y-6">
+                <div className="p-4 rounded-2xl bg-surfaceSecondary/50 border border-border text-xs text-muted flex items-start gap-3">
+                  <div className="p-1.5 rounded-lg bg-accent/10 text-accent shrink-0 mt-0.5">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-foreground">Band 8+ Academic Lexicon:</strong> Auto-harvested from your writing submissions and Cambridge Band 9 benchmarks. Word meanings and contextual nuances are translated into <span className="text-accent font-semibold">{nativeLanguage}</span>.
+                  </div>
+                </div>
+
+                {studyVocabulary.length === 0 ? (
+                  <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-surfaceSecondary flex items-center justify-center text-muted mb-3">
+                      <BookOpen className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold font-heading text-sm text-foreground">
+                      No vocabulary takeaways unlocked yet
+                    </h3>
+                    <p className="text-xs text-muted max-w-sm mt-1">
+                      Complete any writing practice task to automatically harvest high-level collocations and lexical improvements.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {studyVocabulary.map((item) => (
+                      <div
+                        key={item.id}
+                        className="glass-card rounded-2xl p-5 border border-border hover:border-accent/30 transition-all flex flex-col justify-between gap-3 shadow-sm"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold font-heading text-base text-foreground tracking-tight">
+                              {item.title_en}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-accent/10 text-accent border border-accent/20 uppercase">
+                              Band 8.5+
+                            </span>
+                          </div>
+
+                          {(item.content_en || item.example_en) && (
+                            <div className="p-2.5 rounded-xl bg-surfaceSecondary/60 border border-border/60 text-xs text-foreground/90 italic">
+                              &ldquo;{item.content_en || item.example_en}&rdquo;
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bilingual Explanation Box */}
+                        <div className="p-3.5 rounded-xl bg-accent/5 border border-accent/20 space-y-1">
+                          <div className="text-[11px] font-bold text-accent flex items-center gap-1.5">
+                            <Lightbulb className="w-3 h-3" />
+                            <span>{nativeLanguage} Explanation</span>
+                          </div>
+                          <p className="text-xs text-foreground/90 leading-relaxed font-sans">
+                            {item.display_explanation || item.explanation_native || item.content_en}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Additional Category Vocabulary from Tasks */}
+                {aggregatedVocabulary.length > 0 && (
+                  <div className="pt-6 border-t border-border">
+                    <h3 className="text-sm font-bold font-heading text-foreground mb-4 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-accent" />
+                      <span>Topic Word Banks from Published Exams</span>
+                    </h3>
+
+                    <div className="space-y-4">
+                      {aggregatedVocabulary.map((catGroup) => (
+                        <div key={catGroup.category} className="glass-card rounded-2xl p-5 border border-border">
+                          <h4 className="text-xs font-bold font-heading text-foreground mb-3 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-accent" />
+                            <span>{catGroup.category}</span>
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            {catGroup.assets.map((voc: any, i: number) => (
+                              <div
+                                key={i}
+                                className="p-3 rounded-xl bg-surfaceSecondary/60 border border-border flex flex-col gap-1"
+                              >
+                                <span className="font-bold text-accent font-heading">
+                                  {voc.word}
+                                </span>
+                                <p className="text-foreground/90 text-[11px]">
+                                  {voc.meaning}
+                                </p>
+                                <p className="text-muted italic text-[10px] mt-0.5">
+                                  &ldquo;{voc.example}&rdquo;
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 3: GRAMMAR */}
+            {assetSubTab === "grammar" && (
+              <div className="space-y-6">
+                <div className="p-4 rounded-2xl bg-surfaceSecondary/50 border border-border text-xs text-muted flex items-start gap-3">
+                  <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 shrink-0 mt-0.5">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-foreground">Complex Grammar & Sentence Structures:</strong> Master passive inversions, concessive clauses, and cohesive transitions to satisfy Grammatical Range and Accuracy (GRA) Band 8+. Clear breakdown in <span className="text-blue-500 font-semibold">{nativeLanguage}</span>.
+                  </div>
+                </div>
+
+                {studyGrammar.length === 0 ? (
+                  <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-surfaceSecondary flex items-center justify-center text-muted mb-3">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold font-heading text-sm text-foreground">
+                      No grammar structures unlocked yet
+                    </h3>
+                    <p className="text-xs text-muted max-w-sm mt-1">
+                      Complete essays to extract sophisticated sentence frameworks and syntax improvements tailored to your writing.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {studyGrammar.map((item) => (
+                      <div
+                        key={item.id}
+                        className="glass-card rounded-2xl p-5 border border-border hover:border-blue-500/30 transition-all flex flex-col justify-between gap-3 shadow-sm"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold font-heading text-sm text-foreground">
+                              {item.title_en}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-500 border border-blue-500/20 uppercase">
+                              GRA Band 8+
+                            </span>
+                          </div>
+
+                          {(item.content_en || item.example_en) && (
+                            <div className="p-2.5 rounded-xl bg-surfaceSecondary/60 border border-border/60 text-xs text-foreground/90 font-mono">
+                              &ldquo;{item.content_en || item.example_en}&rdquo;
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bilingual Explanation Box */}
+                        <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-1">
+                          <div className="text-[11px] font-bold text-blue-500 flex items-center gap-1.5">
+                            <Sparkles className="w-3 h-3" />
+                            <span>{nativeLanguage} Breakdown & Why it Works</span>
+                          </div>
+                          <p className="text-xs text-foreground/90 leading-relaxed font-sans">
+                            {item.display_explanation || item.explanation_native || item.content_en}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 4: EXAM TRICKS */}
+            {assetSubTab === "tricks" && (
+              <div className="space-y-6">
+                <div className="p-4 rounded-2xl bg-surfaceSecondary/50 border border-border text-xs text-muted flex items-start gap-3">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0 mt-0.5">
+                    <Lightbulb className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-foreground">Cambridge Examiner Secrets & Tactics:</strong> Time management heuristics, Task 1 overview rules, and Task 2 thesis frameworks to prevent score deductions. Explained in <span className="text-amber-500 font-semibold">{nativeLanguage}</span>.
+                  </div>
+                </div>
+
+                {studyTricks.length === 0 ? (
+                  <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-surfaceSecondary flex items-center justify-center text-muted mb-3">
+                      <Lightbulb className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold font-heading text-sm text-foreground">
+                      No exam tricks harvested yet
+                    </h3>
+                    <p className="text-xs text-muted max-w-sm mt-1">
+                      Our AI will automatically surface Cambridge exam strategies from your essay evaluations.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {studyTricks.map((item) => (
+                      <div
+                        key={item.id}
+                        className="glass-card rounded-2xl p-5 border border-border hover:border-amber-500/30 transition-all flex flex-col justify-between gap-3 shadow-sm"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold font-heading text-sm text-foreground">
+                              {item.title_en}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase">
+                              Examiner Trick
+                            </span>
+                          </div>
+
+                          {(item.content_en || item.example_en) && (
+                            <div className="p-2.5 rounded-xl bg-surfaceSecondary/60 border border-border/60 text-xs text-foreground/90 leading-relaxed">
+                              &ldquo;{item.content_en || item.example_en}&rdquo;
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bilingual Explanation Box */}
+                        <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+                          <div className="text-[11px] font-bold text-amber-500 flex items-center gap-1.5">
+                            <Lightbulb className="w-3 h-3" />
+                            <span>{nativeLanguage} Examiner Secret</span>
+                          </div>
+                          <p className="text-xs text-foreground/90 leading-relaxed font-sans">
+                            {item.display_explanation || item.explanation_native || item.content_en}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Band 9 Blueprint Writing Structures (Permanent Reference) */}
+            <div className="pt-6 border-t border-border">
               <h2 className="text-base font-bold font-heading text-foreground mb-3 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-accent" />
                 <span>Band 9 Blueprint Writing Structures</span>
@@ -677,46 +1187,9 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
-
-            {/* Auto-Synced Topic Vocabulary */}
-            <div>
-              <h2 className="text-base font-bold font-heading text-foreground mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent" />
-                <span>Auto-Synced Topic Vocabulary ({aggregatedVocabulary.length} Categories)</span>
-              </h2>
-
-              <div className="space-y-5">
-                {aggregatedVocabulary.map((catGroup) => (
-                  <div key={catGroup.category} className="glass-card rounded-2xl p-5 border border-border">
-                    <h3 className="text-sm font-bold font-heading text-foreground mb-3 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-accent" />
-                      <span>{catGroup.category}</span>
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      {catGroup.assets.map((voc: any, i: number) => (
-                        <div
-                          key={i}
-                          className="p-3 rounded-xl bg-surfaceSecondary/60 border border-border flex flex-col gap-1"
-                        >
-                          <span className="font-bold text-accent font-heading">
-                            {voc.word}
-                          </span>
-                          <p className="text-foreground/90 text-[11px]">
-                            {voc.meaning}
-                          </p>
-                          <p className="text-muted italic text-[10px] mt-0.5">
-                            &ldquo;{voc.example}&rdquo;
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
+
       </main>
 
       {/* 3. SERVER-SIDE 15-MINUTE LOCKDOWN OVERLAY & APPEAL GATE */}
@@ -880,6 +1353,99 @@ export default function StudentDashboard() {
           modelAnswer={reviewModalData.task?.model_answer || null}
         />
       )}
+
+      {/* 6. IN-APP ASSET VIEWER MODAL */}
+      <AnimatePresence>
+        {viewerFile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+            <motion.div
+              variants={backdropVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={() => setViewerFile(null)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-md"
+            />
+            <motion.div
+              variants={fadeInScaleVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="relative z-10 w-full max-w-5xl glass-card rounded-3xl p-5 sm:p-6 border border-border/80 shadow-2xl flex flex-col max-h-[92vh]"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-border/80 gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                    {viewerFile.file_type === "pdf" ? (
+                      <FileText className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold font-heading text-sm sm:text-base text-foreground truncate">
+                      {viewerFile.title}
+                    </h3>
+                    <div className="flex items-center gap-2 text-[11px] text-muted">
+                      <span className="uppercase font-semibold tracking-wider text-accent">
+                        {viewerFile.file_type}
+                      </span>
+                      <span>&bull;</span>
+                      <span>{formatFileSize(viewerFile.file_size)}</span>
+                      {viewerFile.category && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="capitalize">
+                            {viewerFile.category.replace(/_/g, " ")}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={`${viewerFile.file_url}?download=1`}
+                    download={viewerFile.file_name}
+                    className="px-3.5 py-2 rounded-xl bg-accent text-white text-xs font-semibold shadow-md shadow-accent/20 hover:bg-accent/90 transition-all flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Download File</span>
+                  </a>
+                  <button
+                    onClick={() => setViewerFile(null)}
+                    className="p-2 rounded-xl bg-surfaceSecondary hover:bg-border text-muted hover:text-foreground transition-all"
+                    title="Close Viewer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body / Viewer */}
+              <div className="flex-1 overflow-hidden mt-4 rounded-2xl border border-border/60 bg-black/10 flex items-center justify-center min-h-[50vh]">
+                {viewerFile.file_type === "pdf" ? (
+                  <iframe
+                    src={viewerFile.file_url}
+                    className="w-full h-[70vh] rounded-2xl bg-white border-0"
+                    title={viewerFile.title}
+                  />
+                ) : (
+                  <div className="w-full h-[70vh] flex items-center justify-center p-4">
+                    <img
+                      src={viewerFile.file_url}
+                      alt={viewerFile.title}
+                      className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+                    />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <footer className="w-full py-6 text-center text-xs text-muted border-t border-border">

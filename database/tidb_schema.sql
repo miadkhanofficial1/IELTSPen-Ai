@@ -91,3 +91,37 @@ CREATE TABLE IF NOT EXISTS system_settings (
     global_announcement TEXT NULL,
     creator_bio JSON NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. FREE ASSET FILES TABLE (Admin-uploaded PDFs, Cheat Sheets, Images & Materials)
+CREATE TABLE IF NOT EXISTS free_asset_files (
+    id VARCHAR(36) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(100) NOT NULL,
+    file_size INT NOT NULL,
+    file_url TEXT NOT NULL,
+    file_data LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_asset_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 8. STUDENT STUDY ASSETS TABLE (Vocabulary, Grammar Rules & Exam Tricks with Native Explanations)
+CREATE TABLE IF NOT EXISTS student_study_assets (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NULL,
+    task_id VARCHAR(36) NULL,
+    submission_id VARCHAR(36) NULL,
+    asset_type ENUM('vocabulary', 'grammar', 'trick') NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    title_en VARCHAR(255) NOT NULL,
+    content_en TEXT NOT NULL,
+    explanation_native TEXT NULL,
+    native_language VARCHAR(64) NULL,
+    translations JSON NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_study_assets_type (asset_type),
+    INDEX idx_study_assets_user (user_id),
+    INDEX idx_study_assets_title (title_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
