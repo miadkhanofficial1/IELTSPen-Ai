@@ -3,9 +3,11 @@ import { jwtVerify } from "jose/jwt/verify";
 
 export const AUTH_COOKIE_NAME = "ieltspen_token";
 
-const JWT_SECRET_STRING =
-  process.env.JWT_SECRET || "ieltspen-ai-jwt-super-secret-key-production-2026";
-const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_STRING);
+function getJwtSecret(): Uint8Array {
+  const secret =
+    process.env.JWT_SECRET || "IELTSPenSuperSecretJWTKey2026";
+  return new TextEncoder().encode(secret);
+}
 
 export interface AuthUserPayload {
   userId: string;
@@ -23,7 +25,7 @@ export async function createToken(payload: AuthUserPayload): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 /**
@@ -31,7 +33,7 @@ export async function createToken(payload: AuthUserPayload): Promise<string> {
  */
 export async function verifyToken(token: string): Promise<AuthUserPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as unknown as AuthUserPayload;
   } catch {
     return null;

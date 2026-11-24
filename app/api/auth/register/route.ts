@@ -8,9 +8,10 @@ const ADMIN_EMAIL = "miadkhan.official1@gmail.com";
 
 export async function POST(request: NextRequest) {
   try {
-    await ensureDatabaseInitialized();
+    // Ensure TiDB tables exist (and propagate any connection error)
+    await ensureDatabaseInitialized(true);
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const fullName = (body.fullName || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const password = body.password || "";
@@ -19,6 +20,14 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json(
         { success: false, error: "Email and password are required." },
+        { status: 400 }
+      );
+    }
+
+    // Basic email format check
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { success: false, error: "Please enter a valid email address." },
         { status: 400 }
       );
     }
@@ -82,9 +91,34 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error: any) {
     console.error("Register error:", error);
+
+    let userMessage = error.message || "Failed to create account. Please try again.";
+    let statusCode = 500;
+
+    if (error.code === "ER_DUP_ENTRY" || (error.message && error.message.includes("Duplicate entry"))) {
+      userMessage = "An account with this email address already exists.";
+      statusCode = 409;
+    } else if (
+      error.code === "ECONNREFUSED" ||
+      error.code === "ETIMEDOUT" ||
+      error.code === "ENOTFOUND" ||
+      (error.message && error.message.includes("connect ECONNREFUSED"))
+    ) {
+      userMessage = "Database connection error. Please verify TiDB Serverless Cloud status and network connection.";
+      statusCode = 503;
+    } else if (error.code === "ER_ACCESS_DENIED_ERROR") {
+      userMessage = "Database authentication error. Please verify TiDB credentials.";
+      statusCode = 500;
+    }
+
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to create account. Please try again." },
-      { status: 500 }
+      {
+        success: false,
+        error: userMessage,
+        details: process.env.NODE_ENV !== "production" ? error.message : undefined,
+        code: error.code || undefined,
+      },
+      { status: statusCode }
     );
   }
 }

@@ -4,20 +4,28 @@ import { INITIAL_TASKS } from "./mock-tasks";
 
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
+let lastInitError: Error | null = null;
 
 const ADMIN_EMAIL = "miadkhan.official1@gmail.com";
 const ADMIN_PASSWORD = "Admin@IELTSPen2026!";
 const ADMIN_NAME = "MD. MIAD IBNA NOOR";
 
-export async function ensureDatabaseInitialized(): Promise<void> {
+export function getDatabaseInitError(): Error | null {
+  return lastInitError;
+}
+
+export async function ensureDatabaseInitialized(throwOnError = false): Promise<void> {
   if (isInitialized) return;
 
   if (initPromise) {
-    return initPromise;
+    await initPromise;
+    if (throwOnError && lastInitError) throw lastInitError;
+    return;
   }
 
   initPromise = (async () => {
     try {
+      lastInitError = null;
       // 1. Create tables if not exist
       await execute(`
         CREATE TABLE IF NOT EXISTS users (
@@ -110,77 +118,6 @@ export async function ensureDatabaseInitialized(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
 
-      // 2. Seed Default System Settings
-      const existingSettings = await queryOne("SELECT id FROM system_settings WHERE id = 1");
-      if (!existingSettings) {
-        const creatorBio = JSON.stringify({
-          name: "MD. MIAD IBNA NOOR",
-          role: "Founder, MK.Studio",
-          location: "Dhaka, Bangladesh",
-          mission:
-            "Built IELTSPen Ai to empower IELTS aspirants worldwide with a distraction-free, real-exam writing studio and instant multi-language AI evaluation—making Band 8+ preparation simple and accessible for everyone.",
-          github: "https://github.com",
-          linkedin: "https://linkedin.com",
-          portfolio: "https://behance.net",
-          email: ADMIN_EMAIL,
-        });
-
-        await execute(
-          `INSERT INTO system_settings (id, daily_submission_limit, ai_evaluations_paused, global_announcement, creator_bio)
-           VALUES (1, 3, FALSE, NULL, ?)
-           ON DUPLICATE KEY UPDATE id = 1`,
-          [creatorBio]
-        );
-      }
-
-      // 3. Seed Default Admin User
-      const existingAdmin = await queryOne<{ id: string; role: string }>(
-        "SELECT id, role FROM users WHERE email = ?",
-        [ADMIN_EMAIL]
-      );
-
-      const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
-
-      if (!existingAdmin) {
-        const adminId = "admin-miad-ibna-noor";
-        await execute(
-          `INSERT INTO users (id, full_name, email, password_hash, role, native_language, merit_score)
-           VALUES (?, ?, ?, ?, 'admin', 'English', 100)`,
-          [adminId, ADMIN_NAME, ADMIN_EMAIL, passwordHash]
-        );
-      } else if (existingAdmin.role !== "admin") {
-        await execute(
-          "UPDATE users SET role = 'admin', full_name = ? WHERE email = ?",
-          [ADMIN_NAME, ADMIN_EMAIL]
-        );
-      }
-
-      // 4. Seed Initial IELTS Writing Tasks if empty
-      const existingTasks = await query<{ count: number }>(
-        "SELECT COUNT(*) as count FROM writing_tasks"
-      );
-      const count = existingTasks[0]?.count || 0;
-
-      if (count === 0 && INITIAL_TASKS.length > 0) {
-        for (const task of INITIAL_TASKS) {
-          await execute(
-            `INSERT INTO writing_tasks (id, task_type, topic_category, title, prompt_text, chart_data, model_answer, vocabulary_assets, status, published_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', NOW(), NOW())
-             ON DUPLICATE KEY UPDATE title = title`,
-            [
-              task.id,
-              task.task_type,
-              task.topic_category,
-              task.title,
-              task.prompt_text,
-              JSON.stringify(task.chart_data),
-              task.model_answer,
-              JSON.stringify(task.vocabulary_assets),
-            ]
-          );
-        }
-      }
-
       await execute(`
         CREATE TABLE IF NOT EXISTS free_asset_files (
           id VARCHAR(36) PRIMARY KEY,
@@ -216,6 +153,90 @@ export async function ensureDatabaseInitialized(): Promise<void> {
           INDEX idx_study_assets_title (title_en)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
+
+      // 2. Seed Default System Settings
+      try {
+        const existingSettings = await queryOne("SELECT id FROM system_settings WHERE id = 1");
+        if (!existingSettings) {
+          const creatorBio = JSON.stringify({
+            name: "MD. MIAD IBNA NOOR",
+            role: "Founder, MK.Studio",
+            location: "Dhaka, Bangladesh",
+            mission:
+              "Built IELTSPen Ai to empower IELTS aspirants worldwide with a distraction-free, real-exam writing studio and instant multi-language AI evaluation—making Band 8+ preparation simple and accessible for everyone.",
+            github: "https://github.com",
+            linkedin: "https://linkedin.com",
+            portfolio: "https://behance.net",
+            email: ADMIN_EMAIL,
+          });
+
+          await execute(
+            `INSERT INTO system_settings (id, daily_submission_limit, ai_evaluations_paused, global_announcement, creator_bio)
+             VALUES (1, 3, FALSE, NULL, ?)
+             ON DUPLICATE KEY UPDATE id = 1`,
+            [creatorBio]
+          );
+        }
+      } catch (err) {
+        console.warn("Notice seeding system_settings:", err);
+      }
+
+      // 3. Seed Default Admin User
+      try {
+        const existingAdmin = await queryOne<{ id: string; role: string }>(
+          "SELECT id, role FROM users WHERE email = ?",
+          [ADMIN_EMAIL]
+        );
+
+        const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+
+        if (!existingAdmin) {
+          const adminId = "admin-miad-ibna-noor";
+          await execute(
+            `INSERT INTO users (id, full_name, email, password_hash, role, native_language, merit_score)
+             VALUES (?, ?, ?, ?, 'admin', 'English', 100)`,
+            [adminId, ADMIN_NAME, ADMIN_EMAIL, passwordHash]
+          );
+        } else if (existingAdmin.role !== "admin") {
+          await execute(
+            "UPDATE users SET role = 'admin', full_name = ? WHERE email = ?",
+            [ADMIN_NAME, ADMIN_EMAIL]
+          );
+        }
+      } catch (err) {
+        console.warn("Notice seeding admin user:", err);
+      }
+
+      // 4. Seed Initial IELTS Writing Tasks if empty
+      try {
+        const existingTasks = await query<{ count: number }>(
+          "SELECT COUNT(*) as count FROM writing_tasks"
+        );
+        const count = existingTasks[0]?.count || 0;
+
+        if (count === 0 && INITIAL_TASKS.length > 0) {
+          for (const task of INITIAL_TASKS) {
+            await execute(
+              `INSERT INTO writing_tasks (id, task_type, topic_category, title, prompt_text, chart_data, model_answer, vocabulary_assets, status, published_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', NOW(), NOW())
+               ON DUPLICATE KEY UPDATE title = title`,
+              [
+                task.id,
+                task.task_type,
+                task.topic_category,
+                task.title,
+                task.prompt_text,
+                JSON.stringify(task.chart_data),
+                task.model_answer,
+                JSON.stringify(task.vocabulary_assets),
+              ]
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("Notice seeding initial tasks:", err);
+      }
+
 
       // 5. Seed Starter Free Asset Files if empty
       const existingFiles = await query<{ count: number }>("SELECT COUNT(*) as count FROM free_asset_files");
@@ -411,13 +432,15 @@ export async function ensureDatabaseInitialized(): Promise<void> {
       }
 
       isInitialized = true;
-    } catch (err) {
+    } catch (err: any) {
+      lastInitError = err;
       console.error("Database initialization notice:", err);
-      // Don't crash process if database is offline or not yet connected in dev
+      if (throwOnError) throw err;
     } finally {
       initPromise = null;
     }
   })();
 
-  return initPromise;
+  await initPromise;
+  if (throwOnError && lastInitError) throw lastInitError;
 }

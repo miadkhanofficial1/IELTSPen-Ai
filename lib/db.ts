@@ -3,12 +3,46 @@ import mysql, { Pool, PoolOptions, RowDataPacket, ResultSetHeader } from "mysql2
 let pool: Pool | null = null;
 
 function createDatabasePool(): Pool {
-  const databaseUrl = process.env.DATABASE_URL;
+  // 1. Prioritize discrete TiDB / MySQL credentials from .env.local
+  const host = process.env.DB_HOST || process.env.TIDB_HOST;
+  const port = parseInt(process.env.DB_PORT || process.env.TIDB_PORT || "4000", 10);
+  const user = process.env.DB_USER || process.env.TIDB_USER;
+  const password = process.env.DB_PASSWORD || process.env.TIDB_PASSWORD || "";
+  const database = process.env.DB_NAME || process.env.TIDB_DATABASE || "ieltspen_ai";
 
+  if (host && user && host !== "localhost") {
+    const isTiDBorCloud =
+      host.includes("tidbcloud.com") ||
+      host.includes("aws") ||
+      host.includes("render") ||
+      process.env.NODE_ENV === "production" ||
+      port === 4000;
+
+    return mysql.createPool({
+      host,
+      port,
+      user,
+      password,
+      database,
+      charset: "utf8mb4",
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      ssl: isTiDBorCloud
+        ? {
+            minVersion: "TLSv1.2",
+            rejectUnauthorized: true,
+          }
+        : undefined,
+    });
+  }
+
+  // 2. Full connection URI fallback (Render / Docker)
+  const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl && !databaseUrl.includes("<USERNAME>") && !databaseUrl.includes("placeholder")) {
-    // TiDB Serverless Cloud connection via full connection string
     return mysql.createPool({
       uri: databaseUrl,
+      charset: "utf8mb4",
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -19,37 +53,18 @@ function createDatabasePool(): Pool {
     });
   }
 
-  // Discrete connection parameters from .env.local
-  const host = process.env.DB_HOST || process.env.TIDB_HOST || "localhost";
-  const port = parseInt(process.env.DB_PORT || process.env.TIDB_PORT || "4000", 10);
-  const user = process.env.DB_USER || process.env.TIDB_USER || "root";
-  const password = process.env.DB_PASSWORD || process.env.TIDB_PASSWORD || "";
-  const database = process.env.DB_NAME || process.env.TIDB_DATABASE || "ieltspen";
-
-  const isTiDBorCloud =
-    host.includes("tidbcloud.com") ||
-    host.includes("render") ||
-    process.env.NODE_ENV === "production" ||
-    !!process.env.DB_HOST;
-
-  const poolOptions: PoolOptions = {
-    host,
+  // 3. Local fallback
+  return mysql.createPool({
+    host: host || "localhost",
     port,
-    user,
+    user: user || "root",
     password,
-    database,
+    database: database || "ieltspen_ai",
+    charset: "utf8mb4",
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    ssl: isTiDBorCloud
-      ? {
-          minVersion: "TLSv1.2",
-          rejectUnauthorized: true,
-        }
-      : undefined,
-  };
-
-  return mysql.createPool(poolOptions);
+  });
 }
 
 export function getPool(): Pool {
