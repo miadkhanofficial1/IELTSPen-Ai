@@ -1,0 +1,36 @@
+# ==============================================================================
+# IELTSPen Ai — Render Deployment Blueprint (render.yaml)
+# "WRITE SMARTER. SCORE HIGHER."
+# ==============================================================================
+services:
+  - type: web
+    name: ieltspen-ai
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: miadkhan.official1@gmail.com
+      - key: ADMIN_INITIAL_PASSWORD
+        value: Admin@IELTSPen2026!
+      - key: ADMIN_NAME
+        value: MD. MIAD IBNA NOOR
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false

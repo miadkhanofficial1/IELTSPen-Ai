@@ -1,0 +1,29 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="icon-red-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#EB2645" />
+      <stop offset="100%" stopColor="#D91130" />
+    </linearGradient>
+    <linearGradient id="icon-glass-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.32" />
+      <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.18" />
+    </linearGradient>
+    <linearGradient id="icon-glass-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.6" />
+      <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.2" />
+    </linearGradient>
+  </defs>
+
+  <!-- iOS Squircle Body -->
+  <rect width="512" height="512" rx="114" fill="url(#icon-red-gradient)" />
+  <rect x="1.5" y="1.5" width="509" height="509" rx="112.5" stroke="rgba(255, 255, 255, 0.2)" stroke-width="3" fill="none" />
+
+  <!-- Translucent Glass "Ai" Badge -->
+  <g transform="translate(340, 68)">
+    <rect width="94" height="94" rx="26" fill="url(#icon-glass-fill)" stroke="url(#icon-glass-border)" stroke-width="2.5" />
+    <text x="47" y="65" fill="#FFFFFF" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" text-anchor="middle" letter-spacing="-0.02em">Ai</text>
+  </g>
+
+  <!-- Centered White "IELTS" -->
+  <text x="256" y="306" fill="#FFFFFF" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="126" font-weight="800" text-anchor="middle" letter-spacing="-0.04em">IELTS</text>
+</svg>

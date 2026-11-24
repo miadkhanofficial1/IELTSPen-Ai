@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">IELTSPen Ai</string>
+    <string name="title_activity_main">IELTSPen Ai</string>
+    <string name="package_name">com.mkstudio.ieltspenai</string>
+    <string name="custom_url_scheme">com.mkstudio.ieltspenai</string>
+</resources>
