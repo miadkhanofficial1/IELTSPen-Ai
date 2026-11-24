@@ -129,6 +129,64 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      case "create_task": {
+        const {
+          taskType,
+          topicCategory,
+          title,
+          promptText,
+          chartData,
+          modelAnswer,
+          vocabularyAssets,
+          status,
+        } = body;
+
+        if (!title || !promptText) {
+          return NextResponse.json(
+            { error: "Title and Prompt Text are required." },
+            { status: 400 }
+          );
+        }
+
+        const taskId = crypto.randomUUID();
+        const taskStatus = status === "published" ? "published" : "draft";
+
+        await execute(
+          `INSERT INTO writing_tasks (
+            id, task_type, topic_category, title, prompt_text, chart_data, 
+            model_answer, vocabulary_assets, status, published_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${taskStatus === "published" ? "NOW()" : "NULL"}, NOW())`,
+          [
+            taskId,
+            taskType || "task_2",
+            topicCategory || "General",
+            title.trim(),
+            promptText.trim(),
+            chartData ? JSON.stringify(chartData) : null,
+            (modelAnswer || "").trim(),
+            Array.isArray(vocabularyAssets) ? JSON.stringify(vocabularyAssets) : JSON.stringify([]),
+            taskStatus,
+          ]
+        );
+
+        return NextResponse.json({
+          success: true,
+          task: {
+            id: taskId,
+            task_type: taskType || "task_2",
+            topic_category: topicCategory || "General",
+            title: title.trim(),
+            prompt_text: promptText.trim(),
+            chart_data: chartData || null,
+            model_answer: (modelAnswer || "").trim(),
+            vocabulary_assets: Array.isArray(vocabularyAssets) ? vocabularyAssets : [],
+            status: taskStatus,
+            published_at: taskStatus === "published" ? new Date().toISOString() : null,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
+
       case "publish_task": {
         const { taskId } = body;
         await execute(

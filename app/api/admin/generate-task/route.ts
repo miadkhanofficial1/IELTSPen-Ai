@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { taskType, topicCategory, batchCount = 1 } = await request.json();
+    const { taskType, topicCategory, batchCount = 1, customPrompt } = await request.json();
 
     const count = Math.min(5, Math.max(1, Number(batchCount) || 1));
     const generatedDrafts = [];
@@ -37,7 +37,8 @@ export async function POST(request: NextRequest) {
 
       const taskData = await generateIELTSTask(
         taskType || "task_2",
-        selectedCategory
+        selectedCategory,
+        customPrompt
       );
 
       const taskId = crypto.randomUUID();

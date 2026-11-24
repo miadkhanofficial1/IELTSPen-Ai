@@ -39,3 +39,4 @@ Thumbs.db
 # Vercel / Turbopack
 .vercel
 .turbo
+*.tsbuildinfo

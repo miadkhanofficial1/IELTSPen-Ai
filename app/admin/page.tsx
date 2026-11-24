@@ -43,6 +43,9 @@ import {
   Play,
   Pause,
   BarChart2,
+  FilePlus,
+  X,
+  Layers,
 } from "lucide-react";
 import {
   WritingTask,
@@ -89,8 +92,106 @@ export default function AdminDashboardPage() {
   const [genTaskType, setGenTaskType] = useState<"task_1" | "task_2">("task_2");
   const [genCategory, setGenCategory] = useState<string>("Technology");
   const [genBatchCount, setGenBatchCount] = useState<number>(1);
+  const [genCustomTopic, setGenCustomTopic] = useState<string>("");
   const [isGeneratingTask, setIsGeneratingTask] = useState<boolean>(false);
   const [previewDraft, setPreviewDraft] = useState<WritingTask | null>(null);
+
+  // Manual Task Creator State
+  const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
+  const [manualTaskType, setManualTaskType] = useState<"task_1" | "task_2">("task_2");
+  const [manualCategory, setManualCategory] = useState<string>("Technology");
+  const [manualTitle, setManualTitle] = useState<string>("");
+  const [manualPromptText, setManualPromptText] = useState<string>("");
+  const [manualChartJson, setManualChartJson] = useState<string>("");
+  const [manualModelAnswer, setManualModelAnswer] = useState<string>("");
+  const [manualStatus, setManualStatus] = useState<"draft" | "published">("published");
+  const [isCreatingManualTask, setIsCreatingManualTask] = useState<boolean>(false);
+
+  // Real-time parsed chart preview for Manual Creator
+  const parsedManualChart = useMemo(() => {
+    if (manualTaskType !== "task_1" || !manualChartJson.trim()) return null;
+    try {
+      const parsed = JSON.parse(manualChartJson.trim());
+      if (parsed && Array.isArray(parsed.data) && parsed.data.length > 0) {
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }, [manualTaskType, manualChartJson]);
+
+  // Sample templates for manual Task 1
+  const loadChartTemplate = (type: "bar" | "line" | "pie") => {
+    if (type === "bar") {
+      setManualChartJson(
+        JSON.stringify(
+          {
+            type: "bar",
+            title: "Global Renewable Energy Generation (TWh)",
+            xAxisKey: "year",
+            series: [
+              { key: "solar", label: "Solar Energy", color: "#F59E0B" },
+              { key: "wind", label: "Wind Power", color: "#3B82F6" },
+              { key: "hydro", label: "Hydroelectric", color: "#10B981" },
+            ],
+            data: [
+              { year: "2018", solar: 580, wind: 1260, hydro: 4190 },
+              { year: "2020", solar: 850, wind: 1600, hydro: 4350 },
+              { year: "2022", solar: 1280, wind: 2100, hydro: 4330 },
+              { year: "2024", solar: 1680, wind: 2450, hydro: 4410 },
+            ],
+          },
+          null,
+          2
+        )
+      );
+    } else if (type === "line") {
+      setManualChartJson(
+        JSON.stringify(
+          {
+            type: "line",
+            title: "Average Daily Screen Time (Hours/Day)",
+            xAxisKey: "year",
+            series: [
+              { key: "teens", label: "Teens (13-18)", color: "#E31837" },
+              { key: "adults", label: "Adults (19-45)", color: "#3B82F6" },
+              { key: "seniors", label: "Seniors (65+)", color: "#10B981" },
+            ],
+            data: [
+              { year: "2016", teens: 4.8, adults: 3.5, seniors: 1.8 },
+              { year: "2018", teens: 5.9, adults: 4.2, seniors: 2.1 },
+              { year: "2020", teens: 7.6, adults: 5.8, seniors: 2.9 },
+              { year: "2022", teens: 7.9, adults: 5.5, seniors: 3.2 },
+              { year: "2024", teens: 8.4, adults: 5.9, seniors: 3.5 },
+            ],
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      setManualChartJson(
+        JSON.stringify(
+          {
+            type: "pie",
+            title: "Global Household Water Consumption (%)",
+            xAxisKey: "name",
+            series: [{ key: "value", label: "Percentage", color: "#E31837" }],
+            data: [
+              { name: "Toilet Flushing", value: 32 },
+              { name: "Shower & Bath", value: 28 },
+              { name: "Laundry", value: 18 },
+              { name: "Kitchen & Cooking", value: 12 },
+              { name: "Other Domestic", value: 10 },
+            ],
+          },
+          null,
+          2
+        )
+      );
+    }
+  };
 
   // Student Search
   const [studentSearch, setStudentSearch] = useState<string>("");
@@ -176,6 +277,7 @@ export default function AdminDashboardPage() {
           taskType: genTaskType,
           topicCategory: genCategory,
           batchCount: genBatchCount,
+          customPrompt: genCustomTopic.trim() || undefined,
         }),
       });
 
@@ -190,6 +292,67 @@ export default function AdminDashboardPage() {
       alert(err.message || "Could not generate task.");
     } finally {
       setIsGeneratingTask(false);
+    }
+  };
+
+  // 2.1 Action: Create Manual Task
+  const handleCreateManualTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualTitle.trim()) {
+      alert("Please provide a Task Title.");
+      return;
+    }
+    if (!manualPromptText.trim()) {
+      alert("Please provide the official IELTS Prompt Text.");
+      return;
+    }
+
+    let parsedChart: any = null;
+    if (manualTaskType === "task_1" && manualChartJson.trim()) {
+      try {
+        parsedChart = JSON.parse(manualChartJson.trim());
+      } catch (err: any) {
+        alert("Invalid Chart Data JSON. Please ensure valid JSON or clear the field.");
+        return;
+      }
+    }
+
+    setIsCreatingManualTask(true);
+    try {
+      const res = await fetch("/api/admin/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_task",
+          taskType: manualTaskType,
+          topicCategory: manualCategory.trim() || "General",
+          title: manualTitle.trim(),
+          promptText: manualPromptText.trim(),
+          chartData: parsedChart,
+          modelAnswer: manualModelAnswer.trim(),
+          status: manualStatus,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to create task.");
+      }
+
+      setTasks((prev) => [data.task, ...prev]);
+      setPreviewDraft(data.task);
+      setIsManualModalOpen(false);
+
+      // Reset fields
+      setManualTitle("");
+      setManualPromptText("");
+      setManualChartJson("");
+      setManualModelAnswer("");
+      setManualStatus("published");
+    } catch (err: any) {
+      alert(err.message || "Failed to create manual task.");
+    } finally {
+      setIsCreatingManualTask(false);
     }
   };
 
@@ -463,19 +626,26 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background selection:bg-accent/20">
-      {/* 1. FIXED FROSTED GLASS LEFT SIDEBAR (240px) */}
-      <aside className="w-full md:w-60 shrink-0 glass-nav md:h-screen md:sticky md:top-0 border-r border-border p-5 flex flex-col justify-between z-30">
-        <div>
-          {/* Top Brand Logo */}
-          <Link href="/" className="flex flex-col gap-1 mb-8">
-            <BrandLogo variant="auto" showSlogan={false} height={26} />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-accent pl-1">
-              Admin Studio
-            </span>
-          </Link>
+      {/* 1. STICKY FULL-HEIGHT FROSTED GLASS LEFT SIDEBAR */}
+      <aside className="w-full md:w-64 shrink-0 glass-nav sticky top-0 h-screen flex flex-col justify-between overflow-y-auto border-r border-border z-30">
+        <div className="flex flex-col">
+          {/* Top Brand Logo Block: Clean Left-Aligned with proper padding and border-b */}
+          <div className="px-6 pt-6 pb-4 border-b border-border/60">
+            <Link href="/" className="flex flex-col items-start text-left group">
+              <div className="flex items-center justify-start">
+                <BrandLogo variant="auto" showSlogan={false} height={28} className="w-auto" />
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-accent font-mono">
+                  Admin Studio
+                </span>
+              </div>
+            </Link>
+          </div>
 
           {/* Navigation Tabs */}
-          <nav className="space-y-1.5 text-xs font-semibold">
+          <nav className="p-4 space-y-1.5 text-xs font-semibold">
             {[
               { id: "overview", label: "Overview", icon: LayoutDashboard },
               { id: "content", label: "AI Content Studio", icon: Sparkles },
@@ -521,7 +691,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Sidebar Footer Controls */}
-        <div className="pt-6 border-t border-border mt-6 flex items-center justify-between">
+        <div className="p-4 border-t border-border flex items-center justify-between shrink-0 bg-surface/40 backdrop-blur-md">
           <motion.button
             {...tactileButton}
             onClick={toggleTheme}
@@ -542,7 +712,7 @@ export default function AdminDashboardPage() {
               } catch (e) {}
               router.push("/");
             }}
-            className="text-xs font-semibold text-muted hover:text-foreground flex items-center gap-1.5 p-2 rounded-xl glass-pill"
+            className="text-xs font-semibold text-muted hover:text-foreground flex items-center gap-1.5 p-2 rounded-xl glass-pill transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -645,21 +815,37 @@ export default function AdminDashboardPage() {
         {/* TAB 2: AI CONTENT STUDIO */}
         {activeTab === "content" && (
           <div className="space-y-8">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
-                AI Content Studio
-              </h1>
-              <p className="text-xs sm:text-sm text-muted mt-0.5">
-                Generate authentic Cambridge-grade Task 1 &amp; 2 prompts, charts, model essays, and vocabulary assets.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
+                  AI Content Studio
+                </h1>
+                <p className="text-xs sm:text-sm text-muted mt-0.5">
+                  Generate authentic Cambridge-grade Task 1 &amp; 2 prompts, charts, model essays, and vocabulary assets.
+                </p>
+              </div>
+
+              <motion.button
+                {...tactileButton}
+                onClick={() => setIsManualModalOpen(true)}
+                className="self-start sm:self-auto px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#E31837] to-rose-600 text-white font-semibold text-xs shadow-lg shadow-[#E31837]/25 hover:brightness-110 transition-all flex items-center gap-2"
+              >
+                <FilePlus className="w-4 h-4" />
+                <span>+ Create Manual Task</span>
+              </motion.button>
             </div>
 
             {/* Generator Control Panel */}
             <div className="glass-card rounded-3xl p-6 border border-border space-y-5">
-              <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent" />
-                <span>One-Click Task Generator</span>
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-accent" />
+                  <span>One-Click Task Generator</span>
+                </h2>
+                <span className="text-[11px] text-muted hidden sm:inline">
+                  AI Multi-Provider or Instant Built-in Engine
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 {/* Task Type */}
@@ -711,6 +897,59 @@ export default function AdminDashboardPage() {
                     <option value="3">3 Tasks (Batch)</option>
                     <option value="5">5 Tasks (Deep Pool)</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Custom Topic / Short Prompt (Optional) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-xs text-foreground">
+                    Custom Topic / Short Prompt <span className="text-muted font-normal">(Optional)</span>
+                  </label>
+                  {genCustomTopic && (
+                    <button
+                      type="button"
+                      onClick={() => setGenCustomTopic("")}
+                      className="text-[11px] text-muted hover:text-accent transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={genCustomTopic}
+                  onChange={(e) => setGenCustomTopic(e.target.value)}
+                  placeholder={
+                    genTaskType === "task_1"
+                      ? "e.g., Bar chart comparing renewable energy in 4 Asian countries (2018-2024)..."
+                      : "e.g., Remote work impact on urban traffic and housing prices..."
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl glass-input bg-surface text-foreground text-xs placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-muted font-medium">Quick ideas:</span>
+                  {(genTaskType === "task_1"
+                    ? [
+                        "Bar chart comparing renewable energy in 4 Asian countries",
+                        "Line graph of global screen time (2016-2024)",
+                        "Household water consumption distribution",
+                      ]
+                    : [
+                        "Remote work impact on urban traffic",
+                        "Artificial intelligence replacing creative jobs",
+                        "Free public university tuition pros & cons",
+                      ]
+                  ).map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setGenCustomTopic(chip)}
+                      className="px-2.5 py-1 rounded-lg text-[10px] glass-pill border border-border text-muted hover:text-foreground hover:border-accent/40 transition-colors"
+                    >
+                      &ldquo;{chip}&rdquo;
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -864,6 +1103,238 @@ export default function AdminDashboardPage() {
                 ))}
               </div>
             </div>
+
+            {/* MANUAL TASK AUTHORING MODAL */}
+            <AnimatePresence>
+              {isManualModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    transition={iosSpring}
+                    className="glass-card w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl p-6 sm:p-8 space-y-6 bg-surface/95 backdrop-blur-xl"
+                  >
+                    {/* Modal Header */}
+                    <div className="flex items-center justify-between border-b border-border pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-accent/10 text-accent flex items-center justify-center">
+                          <FilePlus className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold font-heading text-foreground">
+                            Create Manual Writing Task
+                          </h2>
+                          <p className="text-xs text-muted">
+                            Author custom Cambridge-aligned IELTS prompts, charts, and model answers.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsManualModalOpen(false)}
+                        className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surfaceSecondary transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Form Body */}
+                    <div className="space-y-4 text-xs">
+                      {/* Task Type & Category Row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-semibold text-foreground mb-1.5">
+                            Task Type
+                          </label>
+                          <select
+                            value={manualTaskType}
+                            onChange={(e) => setManualTaskType(e.target.value as any)}
+                            className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground cursor-pointer"
+                          >
+                            <option value="task_1">Writing Task 1 (Academic Chart/Data)</option>
+                            <option value="task_2">Writing Task 2 (Discursive Essay)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-foreground mb-1.5">
+                            Topic Category
+                          </label>
+                          <input
+                            type="text"
+                            value={manualCategory}
+                            onChange={(e) => setManualCategory(e.target.value)}
+                            placeholder="e.g., Environment, Technology, Education"
+                            className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Task Title */}
+                      <div>
+                        <label className="block font-semibold text-foreground mb-1.5">
+                          Task Title *
+                        </label>
+                        <input
+                          type="text"
+                          value={manualTitle}
+                          onChange={(e) => setManualTitle(e.target.value)}
+                          placeholder="e.g., Renewable Energy Generation Trends (2018–2024)"
+                          className="w-full p-2.5 rounded-xl glass-input bg-surface text-foreground font-medium"
+                        />
+                      </div>
+
+                      {/* Prompt Text */}
+                      <div>
+                        <label className="block font-semibold text-foreground mb-1.5">
+                          Prompt Text / Cambridge Instructions *
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={manualPromptText}
+                          onChange={(e) => setManualPromptText(e.target.value)}
+                          placeholder="You should spend about 20/40 minutes on this task. Write about the following topic..."
+                          className="w-full p-3 rounded-xl glass-input bg-surface text-foreground font-sans leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Task 1 Chart Configuration */}
+                      {manualTaskType === "task_1" && (
+                        <div className="p-4 rounded-2xl border border-accent/20 bg-accent/5 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <BarChart2 className="w-4 h-4 text-accent" />
+                              <label className="font-bold text-foreground">
+                                Chart Data (JSON Specification)
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted">Load Template:</span>
+                              <button
+                                type="button"
+                                onClick={() => loadChartTemplate("bar")}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-surface border border-border hover:bg-surfaceSecondary"
+                              >
+                                Bar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => loadChartTemplate("line")}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-surface border border-border hover:bg-surfaceSecondary"
+                              >
+                                Line
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => loadChartTemplate("pie")}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-surface border border-border hover:bg-surfaceSecondary"
+                              >
+                                Pie
+                              </button>
+                            </div>
+                          </div>
+
+                          <textarea
+                            rows={6}
+                            value={manualChartJson}
+                            onChange={(e) => setManualChartJson(e.target.value)}
+                            placeholder='{"type": "bar", "title": "Chart Title", "xAxisKey": "year", "series": [...], "data": [...]}'
+                            className="w-full p-3 rounded-xl font-mono text-[11px] glass-input bg-surface text-foreground"
+                          />
+
+                          {/* Visual Chart Live Preview */}
+                          {parsedManualChart ? (
+                            <div className="p-3 rounded-xl bg-surface border border-emerald-500/30 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Valid Chart Configuration Preview
+                                </span>
+                                <span className="text-[10px] font-mono text-muted">
+                                  {parsedManualChart.type?.toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="h-56 w-full">
+                                <IELTSChart chartData={parsedManualChart} />
+                              </div>
+                            </div>
+                          ) : manualChartJson.trim() ? (
+                            <p className="text-[11px] text-amber-500 flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              JSON parsing error or invalid format (needs data array).
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+
+                      {/* Band 9 Model Essay */}
+                      <div>
+                        <label className="block font-semibold text-foreground mb-1.5">
+                          Band 9 Model Answer <span className="text-muted font-normal">(Optional)</span>
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={manualModelAnswer}
+                          onChange={(e) => setManualModelAnswer(e.target.value)}
+                          placeholder="Paste high-scoring Cambridge Band 9 model essay..."
+                          className="w-full p-3 rounded-xl glass-input bg-surface text-foreground font-sans leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Status Toggle */}
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-surfaceSecondary/50 border border-border">
+                        <div>
+                          <span className="font-semibold text-foreground block">
+                            Publication Status
+                          </span>
+                          <span className="text-[11px] text-muted">
+                            Published tasks will be instantly available in the Student Task Library.
+                          </span>
+                        </div>
+                        <select
+                          value={manualStatus}
+                          onChange={(e) => setManualStatus(e.target.value as any)}
+                          className="p-2 rounded-xl glass-input bg-surface text-foreground font-semibold cursor-pointer"
+                        >
+                          <option value="published">Publish Live</option>
+                          <option value="draft">Save as Draft</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+                      <button
+                        onClick={() => setIsManualModalOpen(false)}
+                        disabled={isCreatingManualTask}
+                        className="px-4 py-2.5 rounded-xl glass-pill font-semibold text-xs text-muted hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+
+                      <motion.button
+                        {...tactileButton}
+                        onClick={handleCreateManualTask}
+                        disabled={isCreatingManualTask || !manualTitle.trim() || !manualPromptText.trim()}
+                        className="px-6 py-2.5 rounded-xl bg-[#E31837] text-white font-semibold text-xs shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] disabled:opacity-50 transition-all flex items-center gap-2"
+                      >
+                        {isCreatingManualTask ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Saving Task...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span>{manualStatus === "published" ? "Save & Publish" : "Save as Draft"}</span>
+                          </>
+                        )}
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 

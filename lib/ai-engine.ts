@@ -337,19 +337,23 @@ ${essayText}`;
  */
 export async function generateIELTSTask(
   taskType: "task_1" | "task_2",
-  topicCategory: string
+  topicCategory: string,
+  customPrompt?: string
 ): Promise<GeneratedTask> {
+  const promptFocus = customPrompt && customPrompt.trim() ? customPrompt.trim() : topicCategory;
+
   const systemPrompt = `You are an expert Cambridge / IDP IELTS test designer.
 Generate an authentic, exam-grade IELTS ${
     taskType === "task_1" ? "Academic Writing Task 1 (visual data)" : "Writing Task 2 (discursive essay)"
   }.
 Category: ${topicCategory}.
+${customPrompt && customPrompt.trim() ? `Specific Topic / Scenario: "${customPrompt.trim()}". You MUST prioritize this scenario in the prompt, title, chart (if task 1), model answer, and vocabulary.` : ""}
 
 Output ONLY valid JSON strictly adhering to this schema:
 {
   "task_type": "${taskType}",
   "topic_category": "${topicCategory}",
-  "title": "Concise authentic title",
+  "title": "Concise authentic title reflecting the topic",
   "prompt_text": "Official IELTS prompt text instructing to write at least ${taskType === "task_1" ? "150" : "250"} words",
   "chart_data": ${
     taskType === "task_1"
@@ -362,7 +366,7 @@ Output ONLY valid JSON strictly adhering to this schema:
   }`
       : "null"
   },
-  "model_answer": "Complete Band 9.0 model essay with exemplary cohesion, range, and accuracy",
+  "model_answer": "Complete Band 9.0 model essay with exemplary cohesion, range, and accuracy addressing the prompt",
   "vocabulary_assets": [
     {
       "word": "Advanced phrase/word",
@@ -372,7 +376,9 @@ Output ONLY valid JSON strictly adhering to this schema:
   ]
 }`;
 
-  const userPrompt = `Generate 1 authentic IELTS ${taskType} prompt for topic category: ${topicCategory}. Ensure 6-8 vocabulary assets are included.`;
+  const userPrompt = customPrompt && customPrompt.trim()
+    ? `Generate 1 authentic IELTS ${taskType} prompt focused strictly on this scenario/instruction: "${customPrompt.trim()}". Topic Category: ${topicCategory}. Ensure the prompt, ${taskType === "task_1" ? "chart_data, " : ""}model_answer, and 6-8 vocabulary assets directly relate to this custom topic.`
+    : `Generate 1 authentic IELTS ${taskType} prompt for topic category: ${topicCategory}. Ensure 6-8 vocabulary assets are included.`;
 
   const rawJson = await executeAiCompletion(systemPrompt, userPrompt, true);
 
@@ -395,7 +401,7 @@ Output ONLY valid JSON strictly adhering to this schema:
   }
 
   // Fallback realistic generator if AI keys are not yet configured
-  return generateDeterministicTask(taskType, topicCategory);
+  return generateDeterministicTask(taskType, topicCategory, customPrompt);
 }
 
 /**
@@ -403,19 +409,31 @@ Output ONLY valid JSON strictly adhering to this schema:
  */
 function generateDeterministicTask(
   taskType: "task_1" | "task_2",
-  topicCategory: string
+  topicCategory: string,
+  customPrompt?: string
 ): GeneratedTask {
   const randomSuffix = Math.floor(100 + Math.random() * 900);
+  const cleanPrompt = customPrompt?.trim() || "";
 
   if (taskType === "task_1") {
+    const taskTitle = cleanPrompt
+      ? `${cleanPrompt.replace(/[.!?]+$/, "")} [AI #${randomSuffix}]`
+      : `${topicCategory} Indicators by Sector (2015 - 2024) [AI #${randomSuffix}]`;
+
+    const promptText = cleanPrompt
+      ? `The chart illustrates statistical trends regarding ${cleanPrompt.toLowerCase()}.\n\nSummarise the information by selecting and reporting the main features, and make comparisons where relevant.\n\nWrite at least 150 words.`
+      : `The chart illustrates primary statistical trends within ${topicCategory} across four leading international sectors between 2015 and 2024.\n\nSummarise the information by selecting and reporting the main features, and make comparisons where relevant.\n\nWrite at least 150 words.`;
+
+    const topicLabel = cleanPrompt ? cleanPrompt.toLowerCase() : topicCategory.toLowerCase();
+
     return {
       task_type: "task_1",
       topic_category: topicCategory,
-      title: `${topicCategory} Indicators by Sector (${2015} - ${2024}) [AI #${randomSuffix}]`,
-      prompt_text: `The chart illustrates primary statistical trends within ${topicCategory} across four leading international sectors between 2015 and 2024.\n\nSummarise the information by selecting and reporting the main features, and make comparisons where relevant.\n\nWrite at least 150 words.`,
+      title: taskTitle,
+      prompt_text: promptText,
       chart_data: {
         type: "bar",
-        title: `${topicCategory} Global Allocation (Units in Thousands)`,
+        title: cleanPrompt ? cleanPrompt.slice(0, 50) : `${topicCategory} Global Allocation`,
         xAxisKey: "year",
         series: [
           { key: "commercial", label: "Commercial Sector", color: "#E31837" },
@@ -429,7 +447,7 @@ function generateDeterministicTask(
           { year: "2024", commercial: 980, public: 490, residential: 510 },
         ],
       },
-      model_answer: `The bar chart compares the distribution of ${topicCategory.toLowerCase()} allocations across commercial, public, and residential sectors over a nine-year period from 2015 to 2024.\n\nOverall, it is manifest that all three categories witnessed sustained upward progression, with the commercial sector remaining the preeminent driver throughout the timeframe, while residential adoption grew at the steepest exponential rate.\n\nIn 2015, commercial allocations led substantially at 450 units, followed by public services at 320 and the residential domain at a modest 180 units. Over the ensuing decade, commercial requirements expanded consistently, more than doubling to culminate at 980 units by 2024.\n\nConcurrently, residential utilization exhibited remarkable momentum, escalating almost threefold to reach 510 units in 2024, thereby surpassing public services, which registered a more subdued ascent to finish at 490 units.`,
+      model_answer: `The bar chart compares the distribution of ${topicLabel} indicators across commercial, public, and residential sectors over a nine-year period from 2015 to 2024.\n\nOverall, it is manifest that all three categories witnessed sustained upward progression, with the commercial sector remaining the preeminent driver throughout the timeframe, while residential adoption grew at the steepest exponential rate.\n\nIn 2015, commercial allocations led substantially at 450 units, followed by public services at 320 and the residential domain at a modest 180 units. Over the ensuing decade, commercial requirements expanded consistently, more than doubling to culminate at 980 units by 2024.\n\nConcurrently, residential utilization exhibited remarkable momentum, escalating almost threefold to reach 510 units in 2024, thereby surpassing public services, which registered a more subdued ascent to finish at 490 units.`,
       vocabulary_assets: [
         {
           word: "preeminent driver",
@@ -455,13 +473,23 @@ function generateDeterministicTask(
     };
   }
 
+  const taskTitle = cleanPrompt
+    ? `${cleanPrompt.replace(/[.!?]+$/, "")} [AI #${randomSuffix}]`
+    : `${topicCategory}: Modern Societal Impacts [AI #${randomSuffix}]`;
+
+  const promptText = cleanPrompt
+    ? `In contemporary society, issues surrounding ${cleanPrompt.toLowerCase()} have generated considerable interest and debate.\n\nDo the advantages of these developments outweigh the potential drawbacks?\n\nGive reasons for your answer and include any relevant examples from your own knowledge or experience.\n\nWrite at least 250 words.`
+    : `In contemporary society, transformations in ${topicCategory.toLowerCase()} are creating profound changes in personal lifestyles and broader economic structures.\n\nDo the advantages of these modern developments outweigh the potential drawbacks?\n\nGive reasons for your answer and include any relevant examples from your own knowledge or experience.\n\nWrite at least 250 words.`;
+
+  const topicLabel = cleanPrompt ? cleanPrompt.toLowerCase() : topicCategory.toLowerCase();
+
   return {
     task_type: "task_2",
     topic_category: topicCategory,
-    title: `${topicCategory}: Modern Societal Impacts [AI #${randomSuffix}]`,
-    prompt_text: `In contemporary society, transformations in ${topicCategory.toLowerCase()} are creating profound changes in personal lifestyles and broader economic structures.\n\nDo the advantages of these modern developments outweigh the potential drawbacks?\n\nGive reasons for your answer and include any relevant examples from your own knowledge or experience.\n\nWrite at least 250 words.`,
+    title: taskTitle,
+    prompt_text: promptText,
     chart_data: null,
-    model_answer: `The relentless modern progression within ${topicCategory.toLowerCase()} has fundamentally altered human civilization, reshaping cultural paradigms and professional routines alike. While critics contend that rapid adoption brings socio-economic displacement, I firmly believe that the long-term benefits—principally enhanced productivity, cross-border democratization, and elevated living standards—decisively outweigh the drawbacks.\n\nOn one hand, detractors rightly point out the disruptive friction associated with rapid change. Unregulated acceleration in ${topicCategory.toLowerCase()} can exacerbate socioeconomic inequality if disadvantaged communities lack equitable access to infrastructure. Furthermore, overreliance on automated systems risks eroding foundational interpersonal bonds, inducing alienation in urbanized centers. These valid concerns necessitate prudent legislative oversight.\n\nNevertheless, the societal dividends yielded by these innovations are profoundly transformative. First, enhanced efficiencies streamline bureaucratic overhead and reduce marginal costs across critical sectors, allowing nations to reallocate fiscal resources into universal healthcare and pedagogical research. Second, digital connectivity empowers marginalized demographics by providing uninhibited access to global information repositories and employment markets. Consequently, socioeconomic mobility is significantly augmented.\n\nIn conclusion, while the hazards of uncontrolled transition warrant vigilant ethical governance, the immense technological, economic, and humanitarian advantages clearly render these developments indispensable to civilizational flourishing.`,
+    model_answer: `The relentless modern progression regarding ${topicLabel} has fundamentally altered human civilization, reshaping cultural paradigms and professional routines alike. While critics contend that rapid adoption brings socio-economic displacement, I firmly believe that the long-term benefits—principally enhanced productivity, cross-border democratization, and elevated living standards—decisively outweigh the drawbacks.\n\nOn one hand, detractors rightly point out the disruptive friction associated with rapid change. Unregulated acceleration in ${topicLabel} can exacerbate socioeconomic inequality if disadvantaged communities lack equitable access to infrastructure. Furthermore, overreliance on automated systems risks eroding foundational interpersonal bonds, inducing alienation in urbanized centers. These valid concerns necessitate prudent legislative oversight.\n\nNevertheless, the societal dividends yielded by these innovations are profoundly transformative. First, enhanced efficiencies streamline bureaucratic overhead and reduce marginal costs across critical sectors, allowing nations to reallocate fiscal resources into universal healthcare and pedagogical research. Second, digital connectivity empowers marginalized demographics by providing uninhibited access to global information repositories and employment markets. Consequently, socioeconomic mobility is significantly augmented.\n\nIn conclusion, while the hazards of uncontrolled transition warrant vigilant ethical governance, the immense technological, economic, and humanitarian advantages clearly render these developments indispensable to civilizational flourishing.`,
     vocabulary_assets: [
       {
         word: "relentless progression",

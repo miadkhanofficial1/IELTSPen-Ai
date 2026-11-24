@@ -68,6 +68,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   return (
     <svg
       viewBox={`0 0 320 ${viewBoxHeight}`}
+      preserveAspectRatio="xMinYMid meet"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`select-none transition-colors ${className}`}
