@@ -720,9 +720,9 @@ export default function AdminDashboardPage() {
   const pendingAppealsCount = appeals.length;
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-background selection:bg-accent/20">
+    <div className="flex min-h-screen bg-background selection:bg-accent/20">
       {/* 1. STICKY FULL-HEIGHT FROSTED GLASS LEFT SIDEBAR */}
-      <aside className="w-full md:w-64 shrink-0 glass-nav sticky top-0 h-screen flex flex-col justify-between overflow-y-auto border-r border-border z-30">
+      <aside className="sticky top-0 h-screen shrink-0 w-64 glass-nav flex flex-col justify-between overflow-y-auto border-r border-border z-30">
         <div className="flex flex-col">
           {/* Top Brand Logo Block: Clean Left-Aligned with proper padding and border-b */}
           <div className="px-6 pt-6 pb-4 border-b border-border/60">
@@ -822,7 +822,7 @@ export default function AdminDashboardPage() {
       </aside>
 
       {/* 2. MAIN ADMIN CONTENT WORKSPACE */}
-      <main className="flex-1 p-5 sm:p-8 md:p-10 overflow-y-auto max-w-6xl w-full">
+      <main className="flex-1 min-w-0 p-5 sm:p-8 md:p-10 max-w-6xl w-full">
         {/* TAB 1: OVERVIEW */}
         {activeTab === "overview" && (
           <div className="space-y-8">
@@ -1654,8 +1654,14 @@ export default function AdminDashboardPage() {
               </div>
 
               {filteredAssetFiles.length === 0 ? (
-                <div className="text-center py-10 text-muted text-xs">
-                  No study materials found for this category. Upload one above!
+                <div className="text-center py-12 text-muted text-xs flex flex-col items-center justify-center">
+                  <FolderDown className="w-8 h-8 text-muted mb-2 opacity-60" />
+                  <p className="font-semibold text-foreground text-sm">No study materials uploaded yet</p>
+                  <p className="text-muted text-[11px] mt-1 max-w-sm">
+                    {assetCategoryFilter === "all"
+                      ? "Upload official IELTS PDFs, cheat sheets, or chart templates above to share with students."
+                      : "No materials match this category filter. Select another category or upload one above."}
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

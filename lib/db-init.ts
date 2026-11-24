@@ -206,53 +206,6 @@ export async function ensureDatabaseInitialized(throwOnError = false): Promise<v
         console.warn("Notice seeding admin user:", err);
       }
 
-
-      // 5. Seed Starter Free Asset Files if empty
-      const existingFiles = await query<{ count: number }>("SELECT COUNT(*) as count FROM free_asset_files");
-      if ((existingFiles[0]?.count || 0) === 0) {
-        const starterFiles = [
-          {
-            id: "asset-blueprint-pdf",
-            title: "IELTS Band 9 Academic Writing Blueprint (Cheat Sheet)",
-            category: "Cheat Sheet",
-            description: "Official Cambridge-grade paragraph structures, discourse markers, and Band 9 timing strategies for Task 1 & Task 2.",
-            file_name: "IELTS_Band9_Writing_Blueprint.pdf",
-            file_type: "application/pdf",
-            file_size: 428000,
-            file_url: "/api/assets/file/asset-blueprint-pdf",
-          },
-          {
-            id: "asset-task1-charts-img",
-            title: "Task 1 Visual Data Vocab & Preposition Cheat Sheet",
-            category: "Chart Templates",
-            description: "Visual infographic guide covering upward/downward trends, plateau, fluctuation, and essential preposition pairings.",
-            file_name: "Task1_Trends_Prepositions_Guide.png",
-            file_type: "image/png",
-            file_size: 312000,
-            file_url: "/api/assets/file/asset-task1-charts-img",
-          },
-          {
-            id: "asset-vocab-collocations-pdf",
-            title: "Top 120 Academic Collocations & Band 8+ Synonyms",
-            category: "Vocabulary Bank",
-            description: "Curated high-frequency academic collocations categorized by Environment, Technology, Education, and Economy.",
-            file_name: "Academic_Collocations_Master_Bank.pdf",
-            file_type: "application/pdf",
-            file_size: 580000,
-            file_url: "/api/assets/file/asset-vocab-collocations-pdf",
-          },
-        ];
-
-        for (const file of starterFiles) {
-          await execute(
-            `INSERT INTO free_asset_files (id, title, category, description, file_name, file_type, file_size, file_url, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-            [file.id, file.title, file.category, file.description, file.file_name, file.file_type, file.file_size, file.file_url]
-          );
-        }
-      }
-
       // 6. Seed Starter Study Takeaways (Vocabulary, Grammar, Tricks) if empty
       const existingStudyAssets = await query<{ count: number }>("SELECT COUNT(*) as count FROM student_study_assets");
       if ((existingStudyAssets[0]?.count || 0) === 0) {
