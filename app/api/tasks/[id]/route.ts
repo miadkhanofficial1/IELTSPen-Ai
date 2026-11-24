@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne, parseJson } from "@/lib/db";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 
 export async function GET(
   request: NextRequest,
@@ -23,12 +22,6 @@ export async function GET(
           vocabulary_assets: parseJson(task.vocabulary_assets, []),
         },
       });
-    }
-
-    // Fallback to initial tasks
-    const mock = INITIAL_TASKS.find((t) => t.id === taskId);
-    if (mock) {
-      return NextResponse.json({ success: true, task: mock });
     }
 
     return NextResponse.json({ error: "Task not found" }, { status: 404 });

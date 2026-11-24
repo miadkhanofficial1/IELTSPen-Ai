@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import BrandLogo from "@/components/brand/BrandLogo";
 import { useTheme } from "@/components/ThemeProvider";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 import {
   iosSpring,
   tactilePress,
@@ -76,7 +75,7 @@ export default function StudentDashboard() {
   const [taskFilter, setTaskFilter] = useState<"all" | "task_1" | "task_2" | "completed">("all");
 
   // Data collections
-  const [tasks, setTasks] = useState<WritingTask[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<WritingTask[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -503,8 +502,19 @@ export default function StudentDashboard() {
             </div>
 
             {/* Task Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {filteredTasks.map((task) => {
+            {filteredTasks.length === 0 ? (
+              <div className="glass-card rounded-3xl p-12 text-center flex flex-col items-center">
+                <FileText className="w-10 h-10 text-muted mb-3 opacity-60" />
+                <h3 className="text-base font-bold font-heading text-foreground mb-1">
+                  No Practice Tasks Available
+                </h3>
+                <p className="text-xs text-muted max-w-sm leading-relaxed">
+                  No published writing tasks match this category yet. Please check back soon or switch categories.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {filteredTasks.map((task) => {
                 const isCompleted = completedTaskMap.has(task.id);
                 const failedCheat = failedCheatTaskMap.has(task.id);
                 const pastSubmission = completedTaskMap.get(task.id);
@@ -604,7 +614,8 @@ export default function StudentDashboard() {
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         )}
 

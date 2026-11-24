@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import BrandLogo from "@/components/brand/BrandLogo";
 import IELTSChart from "@/components/charts/IELTSChart";
 import EvaluationReviewModal from "@/components/results/EvaluationReviewModal";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 import { WritingTask } from "@/lib/types";
 import {
   iosSpring,
@@ -99,13 +98,6 @@ export default function PracticeStudioPage() {
           if (taskData.task) {
             setTask(taskData.task);
             const duration = taskData.task.task_type === "task_1" ? 20 * 60 : 40 * 60;
-            setSecondsRemaining(duration);
-          }
-        } else {
-          const fallback = INITIAL_TASKS.find((t) => t.id === taskId) || null;
-          if (fallback) {
-            setTask(fallback);
-            const duration = fallback.task_type === "task_1" ? 20 * 60 : 40 * 60;
             setSecondsRemaining(duration);
           }
         }

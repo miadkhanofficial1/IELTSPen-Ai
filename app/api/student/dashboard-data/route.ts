@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { query, queryOne, execute, parseJson } from "@/lib/db";
 import { ensureDatabaseInitialized } from "@/lib/db-init";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 
 // GET: Load all Student Dashboard datasets
 export async function GET() {
@@ -25,19 +24,15 @@ export async function GET() {
       "SELECT global_announcement FROM system_settings WHERE id = 1"
     );
 
-    // 3. Published Tasks
+    // 3. Published Tasks (100% real database records only)
     const rawTasks = await query<any>(
       "SELECT * FROM writing_tasks WHERE status = 'published' ORDER BY published_at DESC, created_at DESC"
     );
-    let tasks = rawTasks.map((t) => ({
+    const tasks = rawTasks.map((t) => ({
       ...t,
       chart_data: parseJson(t.chart_data, null),
       vocabulary_assets: parseJson(t.vocabulary_assets, []),
     }));
-
-    if (tasks.length === 0) {
-      tasks = INITIAL_TASKS;
-    }
 
     // 4. Student Submissions
     const rawSubmissions = await query<any>(
@@ -46,7 +41,7 @@ export async function GET() {
     );
     const submissions = rawSubmissions.map((s) => ({
       ...s,
-      essay_text: s.student_essay,
+      essay_text: s.essay_text || s.student_essay || "",
       criteria_scores: parseJson(s.criteria_scores, null),
       corrections: parseJson(s.corrections, []),
     }));

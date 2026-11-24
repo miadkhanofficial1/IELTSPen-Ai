@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { queryOne } from "@/lib/db";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 
 export async function GET(
   request: NextRequest,
@@ -43,11 +42,13 @@ export async function GET(
       [taskId]
     );
 
-    let modelAnswer = task?.model_answer;
+    const modelAnswer = task?.model_answer;
 
     if (!modelAnswer) {
-      const mock = INITIAL_TASKS.find((t) => t.id === taskId);
-      modelAnswer = mock?.model_answer;
+      return NextResponse.json(
+        { error: "Model answer not found." },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({

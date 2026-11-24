@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import { execute, query, queryOne } from "./db";
-import { INITIAL_TASKS } from "./mock-tasks";
 
 let isInitialized = false;
 let initPromise: Promise<void> | null = null;
@@ -205,36 +204,6 @@ export async function ensureDatabaseInitialized(throwOnError = false): Promise<v
         }
       } catch (err) {
         console.warn("Notice seeding admin user:", err);
-      }
-
-      // 4. Seed Initial IELTS Writing Tasks if empty
-      try {
-        const existingTasks = await query<{ count: number }>(
-          "SELECT COUNT(*) as count FROM writing_tasks"
-        );
-        const count = existingTasks[0]?.count || 0;
-
-        if (count === 0 && INITIAL_TASKS.length > 0) {
-          for (const task of INITIAL_TASKS) {
-            await execute(
-              `INSERT INTO writing_tasks (id, task_type, topic_category, title, prompt_text, chart_data, model_answer, vocabulary_assets, status, published_at, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', NOW(), NOW())
-               ON DUPLICATE KEY UPDATE title = title`,
-              [
-                task.id,
-                task.task_type,
-                task.topic_category,
-                task.title,
-                task.prompt_text,
-                JSON.stringify(task.chart_data),
-                task.model_answer,
-                JSON.stringify(task.vocabulary_assets),
-              ]
-            );
-          }
-        }
-      } catch (err) {
-        console.warn("Notice seeding initial tasks:", err);
       }
 
 

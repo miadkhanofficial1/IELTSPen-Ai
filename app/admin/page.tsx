@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import BrandLogo from "@/components/brand/BrandLogo";
 import IELTSChart from "@/components/charts/IELTSChart";
 import { useTheme } from "@/components/ThemeProvider";
-import { INITIAL_TASKS } from "@/lib/mock-tasks";
 import {
   iosSpring,
   tactilePress,
@@ -85,7 +84,7 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<any>(null);
 
   // Data Collections
-  const [tasks, setTasks] = useState<WritingTask[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<WritingTask[]>([]);
   const [students, setStudents] = useState<Profile[]>([]);
   const [appeals, setAppeals] = useState<(UnlockAppeal & { profile?: Profile })[]>([]);
   const [apiKeys, setApiKeys] = useState<AiApiKey[]>([]);
@@ -1143,66 +1142,76 @@ export default function AdminDashboardPage() {
               </h2>
 
               <div className="space-y-3">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="p-4 rounded-2xl glass-panel border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            task.task_type === "task_1"
-                              ? "bg-blue-500/10 text-blue-500"
-                              : "bg-purple-500/10 text-purple-500"
-                          }`}
-                        >
-                          {task.task_type}
-                        </span>
-                        <span className="text-muted font-medium">
-                          {task.topic_category}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            task.status === "published"
-                              ? "bg-emerald-500/10 text-emerald-500"
-                              : "bg-amber-500/10 text-amber-500"
-                          }`}
-                        >
-                          {task.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-foreground font-heading">
-                        {task.title}
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <button
-                        onClick={() => setPreviewDraft(task)}
-                        className="px-3 py-1.5 rounded-xl glass-pill font-semibold text-xs text-foreground border border-border hover:bg-surfaceSecondary"
-                      >
-                        Inspect
-                      </button>
-
-                      {task.status === "draft" && (
-                        <button
-                          onClick={() => handlePublishTask(task.id)}
-                          className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white font-semibold text-xs shadow-sm hover:bg-emerald-600"
-                        >
-                          Publish
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="p-2 rounded-xl text-muted hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                {tasks.length === 0 ? (
+                  <div className="p-8 rounded-2xl glass-panel border border-border text-center flex flex-col items-center">
+                    <FileText className="w-8 h-8 text-muted mb-2 opacity-60" />
+                    <p className="font-semibold text-foreground">No writing tasks created yet</p>
+                    <p className="text-muted text-[11px] mt-1">
+                      Click "+ Create Manual Task" or use the One-Click Task Generator above to publish your first task.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="p-4 rounded-2xl glass-panel border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              task.task_type === "task_1"
+                                ? "bg-blue-500/10 text-blue-500"
+                                : "bg-purple-500/10 text-purple-500"
+                            }`}
+                          >
+                            {task.task_type}
+                          </span>
+                          <span className="text-muted font-medium">
+                            {task.topic_category}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              task.status === "published"
+                                ? "bg-emerald-500/10 text-emerald-500"
+                                : "bg-amber-500/10 text-amber-500"
+                            }`}
+                          >
+                            {task.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-foreground font-heading">
+                          {task.title}
+                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                          onClick={() => setPreviewDraft(task)}
+                          className="px-3 py-1.5 rounded-xl glass-pill font-semibold text-xs text-foreground border border-border hover:bg-surfaceSecondary"
+                        >
+                          Inspect
+                        </button>
+
+                        {task.status === "draft" && (
+                          <button
+                            onClick={() => handlePublishTask(task.id)}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white font-semibold text-xs shadow-sm hover:bg-emerald-600"
+                          >
+                            Publish
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="p-2 rounded-xl text-muted hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1927,7 +1936,7 @@ export default function AdminDashboardPage() {
                     {filteredStudents.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-8 text-center text-muted">
-                          No students matched your search query.
+                          {studentSearch.trim() ? "No students matched your search query." : "No registered students yet."}
                         </td>
                       </tr>
                     ) : (
