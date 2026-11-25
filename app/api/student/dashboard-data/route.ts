@@ -82,15 +82,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { nativeLanguage } = await request.json();
+    const { nativeLanguage, fullName } = await request.json();
     if (nativeLanguage) {
       await execute("UPDATE users SET native_language = ? WHERE id = ?", [
         nativeLanguage,
         session.userId,
       ]);
     }
+    if (fullName && typeof fullName === "string" && fullName.trim()) {
+      await execute("UPDATE users SET full_name = ? WHERE id = ?", [
+        fullName.trim(),
+        session.userId,
+      ]);
+    }
 
-    return NextResponse.json({ success: true, nativeLanguage });
+    return NextResponse.json({ success: true, nativeLanguage, fullName });
   } catch (error: any) {
     console.error("Error in /api/student/dashboard-data POST:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
