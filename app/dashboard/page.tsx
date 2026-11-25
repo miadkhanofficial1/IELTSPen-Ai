@@ -60,9 +60,33 @@ import {
   Crown,
   Share2,
   ExternalLink,
+  Plus,
+  Trash2,
+  Volume2,
+  MessageSquare,
+  AlertCircle,
+  HelpCircle,
+  Bot,
+  BookMarked,
+  Filter,
+  CheckSquare,
+  Square,
+  CornerDownLeft,
+  RefreshCw,
 } from "lucide-react";
 import EvaluationReviewModal from "@/components/results/EvaluationReviewModal";
-import { WritingTask, Submission, FreeAssetFile, StudyAsset } from "@/lib/types";
+import {
+  WritingTask,
+  Submission,
+  FreeAssetFile,
+  StudyAsset,
+  SavedVocabularyItem,
+  StudyEvent,
+  DailyReflection,
+  StudyArticle,
+  AiTutorMessage,
+  StudyEventCategory,
+} from "@/lib/types";
 
 const NATIVE_LANGUAGES = [
   "English",
@@ -160,7 +184,7 @@ export default function StudentDashboard() {
   const [remainingLockSeconds, setRemainingLockSeconds] = useState<number>(0);
 
   // Free Assets & Study Takeaways state
-  const [assetSubTab, setAssetSubTab] = useState<"files" | "vocabulary" | "grammar" | "tricks">("files");
+  const [assetSubTab, setAssetSubTab] = useState<"files" | "vocabulary" | "articles" | "grammar" | "tricks">("files");
   const [freeAssetFiles, setFreeAssetFiles] = useState<FreeAssetFile[]>([]);
   const [studyVocabulary, setStudyVocabulary] = useState<StudyAsset[]>([]);
   const [studyGrammar, setStudyGrammar] = useState<StudyAsset[]>([]);
@@ -171,6 +195,70 @@ export default function StudentDashboard() {
 
   // Mini calendar state
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+
+  // --- Phase 3: Saved Vocabulary & Flashcard Review ---
+  const [savedVocabList, setSavedVocabList] = useState<SavedVocabularyItem[]>([]);
+  const [vocabCategoryFilter, setVocabCategoryFilter] = useState<string>("all");
+  const [isFlashcardMode, setIsFlashcardMode] = useState<boolean>(false);
+  const [flashcardIndex, setFlashcardIndex] = useState<number>(0);
+  const [isCardFlipped, setIsCardFlipped] = useState<boolean>(false);
+  const [isAddWordModalOpen, setIsAddWordModalOpen] = useState<boolean>(false);
+  const [newWord, setNewWord] = useState<string>("");
+  const [newMeaningEn, setNewMeaningEn] = useState<string>("");
+  const [newMeaningNative, setNewMeaningNative] = useState<string>("");
+  const [newExample, setNewExample] = useState<string>("");
+  const [newCategory, setNewCategory] = useState<string>("General Academic");
+  const [isSavingManualWord, setIsSavingManualWord] = useState<boolean>(false);
+  const [isReviewingCard, setIsReviewingCard] = useState<boolean>(false);
+
+  // --- Phase 3: Study Calendar & Daily Reflection ---
+  const [calendarEvents, setCalendarEvents] = useState<StudyEvent[]>([]);
+  const [selectedEventDate, setSelectedEventDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [isNewEventModalOpen, setIsNewEventModalOpen] = useState<boolean>(false);
+  const [newEventTitle, setNewEventTitle] = useState<string>("");
+  const [newEventCategory, setNewEventCategory] = useState<StudyEventCategory>("Study");
+  const [newEventDate, setNewEventDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [newEventStartTime, setNewEventStartTime] = useState<string>("10:00");
+  const [newEventEndTime, setNewEventEndTime] = useState<string>("11:00");
+  const [isCreatingEvent, setIsCreatingEvent] = useState<boolean>(false);
+  const [dailyGoal, setDailyGoal] = useState<string>("");
+  const [dailyReflectionText, setDailyReflectionText] = useState<string>("");
+  const [isSavingReflection, setIsSavingReflection] = useState<boolean>(false);
+  const [reflectionSavedToast, setReflectionSavedToast] = useState<boolean>(false);
+
+  // --- Phase 3: Study Articles & One-Click Word Saver ---
+  const [studentArticles, setStudentArticles] = useState<StudyArticle[]>([]);
+  const [readingArticle, setReadingArticle] = useState<StudyArticle | null>(null);
+  const [selectedWordLookup, setSelectedWordLookup] = useState<{
+    word: string;
+    definition_en: string;
+    definition_native: string;
+    part_of_speech?: string;
+    example?: string;
+  } | null>(null);
+  const [isLookingUpWord, setIsLookingUpWord] = useState<boolean>(false);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [isSavingWordFromArticle, setIsSavingWordFromArticle] = useState<boolean>(false);
+  const [wordSavedSuccess, setWordSavedSuccess] = useState<string | null>(null);
+
+  // --- Phase 3: DeepStudy AI Writing Tutor ---
+  const [aiTutorMessages, setAiTutorMessages] = useState<AiTutorMessage[]>([
+    {
+      role: "assistant",
+      content:
+        "Welcome to **DeepStudy AI Writing Tutor**! I am your Cambridge-calibrated IELTS Writing coach. How can I assist your writing preparation today? You can brainstorm essay ideas, request thesis statement feedback, refine vocabulary, or ask for sentence paraphrasing.",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    },
+  ]);
+  const [aiTutorInput, setAiTutorInput] = useState<string>("");
+  const [isAiTutorThinking, setIsAiTutorThinking] = useState<boolean>(false);
+  const [aiTutorMode, setAiTutorMode] = useState<
+    "general" | "brainstorm" | "thesis" | "paraphrase" | "grammar"
+  >("general");
 
   // 1. Load initial favorites from localStorage
   useEffect(() => {
@@ -308,6 +396,10 @@ export default function StudentDashboard() {
         }
 
         loadStudyAssets(data.profile?.native_language || "English");
+        loadSavedVocabulary();
+        loadCalendarEvents(new Date().getFullYear(), new Date().getMonth() + 1);
+        loadDailyReflection(new Date().toISOString().split("T")[0]);
+        loadStudentArticles();
       } catch (err) {
         console.error("Dashboard data load error:", err);
       } finally {
@@ -377,6 +469,340 @@ export default function StudentDashboard() {
       });
     } catch (err) {
       console.warn("Could not save language preference:", err);
+    }
+  };
+
+  // --- Phase 3 Handlers ---
+  const loadSavedVocabulary = async () => {
+    try {
+      const res = await fetch("/api/student/vocabulary");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.vocabulary) setSavedVocabList(data.vocabulary);
+      }
+    } catch (e) {
+      console.warn("Failed to load vocabulary:", e);
+    }
+  };
+
+  const handleSaveManualWord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWord.trim() || !newMeaningEn.trim()) return;
+    setIsSavingManualWord(true);
+    try {
+      const res = await fetch("/api/student/vocabulary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: newWord.trim(),
+          meaning_en: newMeaningEn.trim(),
+          meaning_native: newMeaningNative.trim() || undefined,
+          example_sentence: newExample.trim() || undefined,
+          topic_category: newCategory,
+        }),
+      });
+      if (res.ok) {
+        setIsAddWordModalOpen(false);
+        setNewWord("");
+        setNewMeaningEn("");
+        setNewMeaningNative("");
+        setNewExample("");
+        await loadSavedVocabulary();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to save word.");
+      }
+    } catch (e) {
+      alert("Error saving word.");
+    } finally {
+      setIsSavingManualWord(false);
+    }
+  };
+
+  const handleDeleteWord = async (vocabId: string) => {
+    try {
+      const res = await fetch(`/api/student/vocabulary?id=${vocabId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSavedVocabList((prev) => prev.filter((v) => v.id !== vocabId));
+      }
+    } catch (e) {
+      console.warn("Delete word failed:", e);
+    }
+  };
+
+  const handleReviewCard = async (rating: "again" | "hard" | "good" | "easy") => {
+    if (savedVocabList.length === 0 || isReviewingCard) return;
+    const currentCard = savedVocabList[flashcardIndex];
+    if (!currentCard) return;
+
+    setIsReviewingCard(true);
+    try {
+      await fetch("/api/student/vocabulary/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vocab_id: currentCard.id, rating }),
+      });
+
+      setIsCardFlipped(false);
+      if (flashcardIndex + 1 < savedVocabList.length) {
+        setFlashcardIndex((prev) => prev + 1);
+      } else {
+        setFlashcardIndex(0);
+        alert("Review session complete! Great work on your vocabulary mastery.");
+        setIsFlashcardMode(false);
+      }
+      await loadSavedVocabulary();
+    } catch (e) {
+      console.warn("Review error:", e);
+    } finally {
+      setIsReviewingCard(false);
+    }
+  };
+
+  const loadCalendarEvents = async (year: number, month: number) => {
+    try {
+      const res = await fetch(`/api/student/calendar?year=${year}&month=${month}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.events) setCalendarEvents(data.events);
+      }
+    } catch (e) {
+      console.warn("Failed to load events:", e);
+    }
+  };
+
+  const loadDailyReflection = async (dateStr: string) => {
+    try {
+      const res = await fetch(`/api/student/reflections?date=${dateStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reflection) {
+          setDailyGoal(data.reflection.daily_goal || "");
+          setDailyReflectionText(data.reflection.reflection_text || "");
+        } else {
+          setDailyGoal("");
+          setDailyReflectionText("");
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load daily reflection:", e);
+    }
+  };
+
+  const handleCreateCalendarEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventTitle.trim()) return;
+    setIsCreatingEvent(true);
+    try {
+      const res = await fetch("/api/student/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newEventTitle.trim(),
+          category: newEventCategory,
+          event_date: newEventDate,
+          start_time: newEventStartTime || undefined,
+          end_time: newEventEndTime || undefined,
+        }),
+      });
+      if (res.ok) {
+        setIsNewEventModalOpen(false);
+        setNewEventTitle("");
+        await loadCalendarEvents(calendarYear, calendarMonth + 1);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to create event.");
+      }
+    } catch (e) {
+      alert("Error creating event.");
+    } finally {
+      setIsCreatingEvent(false);
+    }
+  };
+
+  const handleToggleEventCompleted = async (eventId: string, currentStatus: boolean) => {
+    try {
+      const res = await fetch("/api/student/calendar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: eventId, is_completed: !currentStatus }),
+      });
+      if (res.ok) {
+        setCalendarEvents((prev) =>
+          prev.map((ev) => (ev.id === eventId ? { ...ev, is_completed: !currentStatus } : ev))
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to toggle event:", e);
+    }
+  };
+
+  const handleDeleteCalendarEvent = async (eventId: string) => {
+    try {
+      const res = await fetch(`/api/student/calendar?id=${eventId}`, { method: "DELETE" });
+      if (res.ok) {
+        setCalendarEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+      }
+    } catch (e) {
+      console.warn("Failed to delete event:", e);
+    }
+  };
+
+  const handleSaveDailyReflection = async () => {
+    setIsSavingReflection(true);
+    try {
+      const res = await fetch("/api/student/reflections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reflection_date: selectedEventDate,
+          daily_goal: dailyGoal.trim() || undefined,
+          reflection_text: dailyReflectionText.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        setReflectionSavedToast(true);
+        setTimeout(() => setReflectionSavedToast(false), 2000);
+      }
+    } catch (e) {
+      console.warn("Save reflection error:", e);
+    } finally {
+      setIsSavingReflection(false);
+    }
+  };
+
+  const loadStudentArticles = async () => {
+    try {
+      const res = await fetch("/api/student/articles");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.articles) setStudentArticles(data.articles);
+      }
+    } catch (e) {
+      console.warn("Load articles error:", e);
+    }
+  };
+
+  const handleWordClickInArticle = async (word: string, contextSentence: string, e: React.MouseEvent) => {
+    const clean = word.replace(/[^a-zA-Z-]/g, "").trim();
+    if (!clean || clean.length < 2) return;
+
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setTooltipPos({ x: rect.left, y: rect.bottom + window.scrollY + 6 });
+    setIsLookingUpWord(true);
+    setSelectedWordLookup(null);
+
+    try {
+      const res = await fetch("/api/student/word-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: clean,
+          contextSentence,
+          targetLanguage: nativeLanguage,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedWordLookup(data);
+      }
+    } catch (err) {
+      console.warn("Word lookup error:", err);
+    } finally {
+      setIsLookingUpWord(false);
+    }
+  };
+
+  const handleSaveWordFromLookup = async () => {
+    if (!selectedWordLookup) return;
+    setIsSavingWordFromArticle(true);
+    try {
+      const res = await fetch("/api/student/vocabulary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: selectedWordLookup.word,
+          meaning_en: selectedWordLookup.definition_en,
+          meaning_native: selectedWordLookup.definition_native,
+          example_sentence: selectedWordLookup.example,
+          topic_category: readingArticle?.category || "General Academic",
+        }),
+      });
+      if (res.ok) {
+        setWordSavedSuccess(selectedWordLookup.word);
+        setTimeout(() => setWordSavedSuccess(null), 2500);
+        await loadSavedVocabulary();
+      }
+    } catch (e) {
+      console.warn("Failed to save word:", e);
+    } finally {
+      setIsSavingWordFromArticle(false);
+    }
+  };
+
+  const handleSendAiTutorMessage = async () => {
+    if (!aiTutorInput.trim() || isAiTutorThinking) return;
+    const userText = aiTutorInput.trim();
+    setAiTutorInput("");
+
+    const userMsg: AiTutorMessage = {
+      role: "user",
+      content: userText,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    setAiTutorMessages((prev) => [...prev, userMsg]);
+    setIsAiTutorThinking(true);
+
+    try {
+      const historyToSend = [...aiTutorMessages, userMsg].map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const res = await fetch("/api/student/ai-tutor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: historyToSend,
+          mode: aiTutorMode,
+          nativeLanguage,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAiTutorMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.error || "Could not generate response. Please try again.",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+        return;
+      }
+
+      setAiTutorMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.reply,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+    } catch (e) {
+      setAiTutorMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Connection to DeepStudy AI Tutor interrupted. Please retry.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ]);
+    } finally {
+      setIsAiTutorThinking(false);
     }
   };
 
@@ -2069,18 +2495,34 @@ export default function StudentDashboard() {
           ------------------------------------------------------------------- */}
           {activeTab === "calendar" && (
             <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
-                  Study Calendar &amp; Planner
-                </h1>
-                <p className="text-xs sm:text-sm text-muted mt-0.5">
-                  Track your daily practice streak, plan upcoming writing sessions, and maintain exam readiness.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
+                    Study Calendar &amp; Daily Reflection
+                  </h1>
+                  <p className="text-xs sm:text-sm text-muted mt-0.5">
+                    Schedule practice exams, set daily revision targets, and write daily reflection journals.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewEventDate(selectedEventDate);
+                      setIsNewEventModalOpen(true);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#E31837] text-white text-xs font-bold shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-1.5 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Schedule Event</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Big Calendar Card */}
-                <div className="md:col-span-2 glass-card rounded-3xl p-6 border border-border space-y-5">
+                <div className="lg:col-span-2 glass-card rounded-3xl p-6 border border-border space-y-5">
                   <div className="flex items-center justify-between">
                     <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
                       <CalendarIcon className="w-4 h-4 text-accent" />
@@ -2091,17 +2533,21 @@ export default function StudentDashboard() {
 
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() =>
-                          setCalendarDate(new Date(calendarYear, calendarMonth - 1, 1))
-                        }
+                        onClick={() => {
+                          const prev = new Date(calendarYear, calendarMonth - 1, 1);
+                          setCalendarDate(prev);
+                          loadCalendarEvents(prev.getFullYear(), prev.getMonth() + 1);
+                        }}
                         className="p-1.5 rounded-xl glass-pill hover:bg-surfaceSecondary text-muted hover:text-foreground"
                       >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() =>
-                          setCalendarDate(new Date(calendarYear, calendarMonth + 1, 1))
-                        }
+                        onClick={() => {
+                          const next = new Date(calendarYear, calendarMonth + 1, 1);
+                          setCalendarDate(next);
+                          loadCalendarEvents(next.getFullYear(), next.getMonth() + 1);
+                        }}
                         className="p-1.5 rounded-xl glass-pill hover:bg-surfaceSecondary text-muted hover:text-foreground"
                       >
                         <ChevronRight className="w-4 h-4" />
@@ -2121,72 +2567,379 @@ export default function StudentDashboard() {
                   {/* Calendar Grid */}
                   <div className="grid grid-cols-7 gap-2 text-center text-xs">
                     {Array.from({ length: firstDayIndex }).map((_, i) => (
-                      <div key={`empty-big-${i}`} className="h-12" />
+                      <div key={`empty-big-${i}`} className="h-14" />
                     ))}
 
                     {Array.from({ length: daysInMonth }).map((_, i) => {
                       const dayNum = i + 1;
-                      const dateKey = `${calendarYear}-${calendarMonth}-${dayNum}`;
-                      const isCurrentDay = dateKey === todayStr;
-                      const hasCompletedTest = completedDateSet.has(dateKey);
+                      const dateKey = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+                      const isCurrentDay = dateKey === new Date().toISOString().split("T")[0];
+                      const isSelected = dateKey === selectedEventDate;
+                      const hasCompletedTest = completedDateSet.has(`${calendarYear}-${calendarMonth}-${dayNum}`);
+                      const dayEvents = calendarEvents.filter((ev) => ev.event_date.startsWith(dateKey));
 
                       return (
-                        <div
+                        <button
                           key={`big-day-${dayNum}`}
-                          className={`h-12 rounded-2xl flex flex-col items-center justify-center font-medium relative border transition-all ${
-                            isCurrentDay
-                              ? "bg-[#E31837] text-white font-bold border-[#E31837] shadow-lg shadow-[#E31837]/25"
-                              : hasCompletedTest
-                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/25"
+                          type="button"
+                          onClick={() => {
+                            setSelectedEventDate(dateKey);
+                            loadDailyReflection(dateKey);
+                          }}
+                          className={`h-14 rounded-2xl flex flex-col items-center justify-between p-1.5 font-medium relative border transition-all ${
+                            isSelected
+                              ? "border-[#E31837] bg-accent/10 shadow-sm shadow-[#E31837]/20"
+                              : isCurrentDay
+                              ? "bg-surfaceSecondary border-accent/40"
                               : "glass-panel border-border/70 text-foreground hover:border-accent/40"
                           }`}
                         >
-                          <span className="text-sm">{dayNum}</span>
-                          {hasCompletedTest && (
-                            <span className="text-[9px] font-bold uppercase tracking-wider block">
-                              Completed
+                          <div className="flex items-center justify-between w-full">
+                            <span
+                              className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${
+                                isCurrentDay
+                                  ? "bg-[#E31837] text-white"
+                                  : "text-foreground"
+                              }`}
+                            >
+                              {dayNum}
                             </span>
-                          )}
-                        </div>
+                            {hasCompletedTest && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Completed test on this day" />
+                            )}
+                          </div>
+
+                          {/* Event Indicators */}
+                          <div className="w-full flex items-center justify-center gap-1 overflow-hidden">
+                            {dayEvents.slice(0, 3).map((ev, eIdx) => (
+                              <span
+                                key={eIdx}
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  ev.category === "Exam Date"
+                                    ? "bg-red-500"
+                                    : ev.category === "Goals"
+                                    ? "bg-purple-500"
+                                    : ev.category === "To-do"
+                                    ? "bg-amber-500"
+                                    : "bg-blue-500"
+                                }`}
+                              />
+                            ))}
+                            {dayEvents.length > 3 && (
+                              <span className="text-[9px] text-muted font-bold font-mono">
+                                +{dayEvents.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Planner Targets & Streak */}
+                {/* Right Side: Selected Date Schedule & Daily Reflection Journal */}
                 <div className="space-y-6">
-                  <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
-                    <h3 className="font-bold font-heading text-sm text-foreground flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-amber-500" />
-                      <span>Study Consistency</span>
-                    </h3>
+                  {/* Selected Date Schedule */}
+                  <div className="glass-card rounded-3xl p-5 border border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-accent block">
+                          Schedule For
+                        </span>
+                        <h3 className="font-bold font-heading text-sm text-foreground">
+                          {new Date(selectedEventDate + "T00:00:00").toLocaleDateString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </h3>
+                      </div>
 
-                    <div className="p-4 rounded-2xl bg-surfaceSecondary/60 border border-border text-center">
-                      <span className="text-3xl font-extrabold font-heading text-accent block">
-                        {completedSubmissions.length}
-                      </span>
-                      <span className="text-xs text-muted mt-1 block">
-                        Total Completed Exam Simulations
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewEventDate(selectedEventDate);
+                          setIsNewEventModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-xl glass-pill text-accent hover:bg-accent/10 transition-colors"
+                        title="Add event on this date"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
                     </div>
 
+                    {/* Events List */}
                     <div className="space-y-2 text-xs">
-                      <div className="flex justify-between text-muted">
-                        <span>Weekly Target</span>
-                        <strong className="text-foreground">3 / 5 Tests</strong>
-                      </div>
-                      <div className="w-full h-2 rounded-full bg-surfaceSecondary overflow-hidden">
-                        <div
-                          className="h-full bg-accent rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(100, (completedSubmissions.length / 5) * 100)}%`,
-                          }}
+                      {calendarEvents.filter((ev) => ev.event_date.startsWith(selectedEventDate)).length === 0 ? (
+                        <div className="p-4 rounded-2xl bg-surfaceSecondary/40 border border-border text-center text-muted">
+                          <p>No study tasks scheduled for this day.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewEventDate(selectedEventDate);
+                              setIsNewEventModalOpen(true);
+                            }}
+                            className="mt-2 text-accent font-semibold hover:underline inline-block"
+                          >
+                            + Add a study goal or exam
+                          </button>
+                        </div>
+                      ) : (
+                        calendarEvents
+                          .filter((ev) => ev.event_date.startsWith(selectedEventDate))
+                          .map((ev) => (
+                            <div
+                              key={ev.id}
+                              className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-2 ${
+                                ev.is_completed
+                                  ? "bg-surfaceSecondary/30 border-border opacity-60"
+                                  : "glass-card border-border hover:border-accent/30"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleEventCompleted(ev.id, ev.is_completed)}
+                                  className="text-muted hover:text-accent shrink-0"
+                                >
+                                  {ev.is_completed ? (
+                                    <CheckSquare className="w-4 h-4 text-emerald-500" />
+                                  ) : (
+                                    <Square className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <div className="min-w-0">
+                                  <span
+                                    className={`font-semibold block truncate ${
+                                      ev.is_completed ? "line-through text-muted" : "text-foreground"
+                                    }`}
+                                  >
+                                    {ev.title}
+                                  </span>
+                                  <span className="text-[10px] text-muted flex items-center gap-1.5">
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded font-medium ${
+                                        ev.category === "Exam Date"
+                                          ? "text-red-500 bg-red-500/10"
+                                          : ev.category === "Goals"
+                                          ? "text-purple-500 bg-purple-500/10"
+                                          : "text-blue-500 bg-blue-500/10"
+                                      }`}
+                                    >
+                                      {ev.category}
+                                    </span>
+                                    {ev.start_time && (
+                                      <span>
+                                        {ev.start_time} {ev.end_time ? `- ${ev.end_time}` : ""}
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCalendarEvent(ev.id)}
+                                className="p-1 text-muted hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Daily Reflection & Goals Journal */}
+                  <div className="glass-card rounded-3xl p-5 border border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold font-heading text-sm text-foreground flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-accent" />
+                        <span>Daily Reflection &amp; Goals</span>
+                      </h3>
+                      {reflectionSavedToast && (
+                        <span className="text-[11px] font-bold text-emerald-500 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Saved!</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-muted font-medium mb-1">
+                          Today&apos;s Target / Goal:
+                        </label>
+                        <input
+                          type="text"
+                          value={dailyGoal}
+                          onChange={(e) => setDailyGoal(e.target.value)}
+                          placeholder="e.g. Master Task 1 overview paragraph & 15 collocations"
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-muted font-medium mb-1">
+                          Evening Reflection &amp; Insights:
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={dailyReflectionText}
+                          onChange={(e) => setDailyReflectionText(e.target.value)}
+                          placeholder="What went well today? What sentence structures need improvement tomorrow?"
+                          className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent resize-none"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveDailyReflection}
+                        disabled={isSavingReflection}
+                        className="w-full py-2 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:bg-accent-hover transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isSavingReflection ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Save Daily Reflection</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* New Event Modal */}
+              <AnimatePresence>
+                {isNewEventModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                      transition={iosSpring}
+                      className="glass-card w-full max-w-md rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl overflow-hidden bg-surface/95 backdrop-blur-xl p-6 space-y-4"
+                    >
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <div className="flex items-center gap-2">
+                          <CalendarIcon className="w-5 h-5 text-accent" />
+                          <h2 className="text-base font-bold font-heading text-foreground">
+                            Schedule Study Event
+                          </h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsNewEventModalOpen(false)}
+                          className="p-1 rounded-lg text-muted hover:text-foreground"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleCreateCalendarEvent} className="space-y-3 text-xs">
+                        <div>
+                          <label className="block font-semibold text-foreground mb-1">
+                            Event Title *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newEventTitle}
+                            onChange={(e) => setNewEventTitle(e.target.value)}
+                            placeholder="e.g. Task 2 Timed Simulation or Cambridge Book 18"
+                            className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1">
+                              Category
+                            </label>
+                            <select
+                              value={newEventCategory}
+                              onChange={(e) => setNewEventCategory(e.target.value as any)}
+                              className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                            >
+                              <option value="Study">Study Session</option>
+                              <option value="Exam Date">Official Exam Date</option>
+                              <option value="To-do">To-do</option>
+                              <option value="Goals">Target Goal</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1">
+                              Date
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={newEventDate}
+                              onChange={(e) => setNewEventDate(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1">
+                              Start Time (Optional)
+                            </label>
+                            <input
+                              type="time"
+                              value={newEventStartTime}
+                              onChange={(e) => setNewEventStartTime(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1">
+                              End Time (Optional)
+                            </label>
+                            <input
+                              type="time"
+                              value={newEventEndTime}
+                              onChange={(e) => setNewEventEndTime(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-3 flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsNewEventModalOpen(false)}
+                            className="px-4 py-2 rounded-xl text-muted hover:text-foreground font-medium"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isCreatingEvent}
+                            className="px-5 py-2 rounded-xl bg-[#E31837] text-white font-bold shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isCreatingEvent ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Plus className="w-4 h-4" />
+                            )}
+                            <span>Save Event</span>
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -2204,11 +2957,12 @@ export default function StudentDashboard() {
                 </p>
               </div>
 
-              {/* 4 iOS Segmented Sub-Tabs */}
+              {/* 5 iOS Segmented Sub-Tabs */}
               <div className="p-1 rounded-2xl glass-pill flex flex-wrap items-center gap-1 border border-border">
                 {[
                   { id: "files", label: "Files & PDFs", icon: FolderDown },
-                  { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+                  { id: "vocabulary", label: "Vocabulary & Spaced Review", icon: BookOpen },
+                  { id: "articles", label: "Study Articles & Guides", icon: BookMarked },
                   { id: "grammar", label: "Grammar", icon: Layers },
                   { id: "tricks", label: "Exam Tricks", icon: Lightbulb },
                 ].map((st) => {
@@ -2304,49 +3058,667 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              {/* SUB-TAB 2: VOCABULARY */}
+              {/* SUB-TAB 2: VOCABULARY & SPACED REVIEW HUB */}
               {assetSubTab === "vocabulary" && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-surfaceSecondary/50 border border-border text-xs text-muted flex items-start gap-3">
-                    <BookOpen className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-foreground">Band 8+ Academic Lexicon:</strong> Auto-harvested from Cambridge benchmarks and evaluated in <strong className="text-accent">{nativeLanguage}</strong>.
+                <div className="space-y-6">
+                  {/* Spaced Repetition Mastery Banner */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="glass-card rounded-2xl p-4 border border-border">
+                      <span className="text-[11px] font-medium text-muted block">Saved Lexicon</span>
+                      <strong className="text-xl font-extrabold font-heading text-foreground mt-0.5 block">
+                        {savedVocabList.length} Words
+                      </strong>
+                    </div>
+
+                    <div className="glass-card rounded-2xl p-4 border border-border">
+                      <span className="text-[11px] font-medium text-muted block">Due for Review</span>
+                      <strong className="text-xl font-extrabold font-heading text-red-500 mt-0.5 block">
+                        {
+                          savedVocabList.filter(
+                            (v) => !v.next_review_at || new Date(v.next_review_at) <= new Date()
+                          ).length
+                        }
+                      </strong>
+                    </div>
+
+                    <div className="glass-card rounded-2xl p-4 border border-border">
+                      <span className="text-[11px] font-medium text-muted block">Mastered (Level 4+)</span>
+                      <strong className="text-xl font-extrabold font-heading text-emerald-500 mt-0.5 block">
+                        {savedVocabList.filter((v) => (v.mastery_level || 1) >= 4).length}
+                      </strong>
+                    </div>
+
+                    <div className="glass-card rounded-2xl p-4 border border-border">
+                      <span className="text-[11px] font-medium text-muted block">Native Explanations</span>
+                      <strong className="text-xl font-extrabold font-heading text-accent mt-0.5 block truncate">
+                        {nativeLanguage}
+                      </strong>
                     </div>
                   </div>
 
-                  {studyVocabulary.length === 0 ? (
+                  {/* Actions & Topic Filters */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Topic Filter Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                      {[
+                        "all",
+                        "Environment & Climate",
+                        "Technology & AI",
+                        "Education",
+                        "Health",
+                        "Work & Economy",
+                        "Writing Task 1 — Trends",
+                        "Linking & Academic Phrases",
+                        "General Academic",
+                      ].map((topic) => (
+                        <button
+                          key={topic}
+                          type="button"
+                          onClick={() => setVocabCategoryFilter(topic)}
+                          className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all ${
+                            vocabCategoryFilter === topic
+                              ? "bg-[#E31837] text-white shadow-sm"
+                              : "glass-pill text-muted hover:text-foreground border border-border"
+                          }`}
+                        >
+                          {topic === "all" ? "All Topics" : topic}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddWordModalOpen(true)}
+                        className="px-3.5 py-1.5 rounded-xl glass-pill text-xs font-semibold text-accent border border-accent/20 hover:bg-accent/10 flex items-center gap-1.5 transition-all"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Word</span>
+                      </button>
+
+                      {savedVocabList.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsFlashcardMode(!isFlashcardMode);
+                            setFlashcardIndex(0);
+                            setIsCardFlipped(false);
+                          }}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            isFlashcardMode
+                              ? "bg-foreground text-background"
+                              : "bg-[#E31837] text-white shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C]"
+                          }`}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>{isFlashcardMode ? "Exit Review" : "Practice Flashcards"}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* FLASHCARD REVIEW MODE */}
+                  {isFlashcardMode && savedVocabList.length > 0 && (
+                    <div className="glass-card rounded-3xl p-8 border border-accent/30 flex flex-col items-center justify-center max-w-xl mx-auto space-y-6">
+                      <div className="flex items-center justify-between w-full text-xs text-muted">
+                        <span>
+                          Card <strong>{flashcardIndex + 1}</strong> of <strong>{savedVocabList.length}</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold text-[10px] uppercase">
+                          {savedVocabList[flashcardIndex].topic_category || "General"}
+                        </span>
+                      </div>
+
+                      {/* 3D Flip Flashcard */}
+                      <div
+                        onClick={() => setIsCardFlipped(!isCardFlipped)}
+                        className="w-full min-h-[220px] rounded-3xl p-8 cursor-pointer flex flex-col items-center justify-center text-center transition-all bg-surfaceSecondary/60 hover:bg-surfaceSecondary border border-border shadow-lg relative group select-none"
+                      >
+                        {!isCardFlipped ? (
+                          <div className="space-y-3">
+                            <span className="text-[10px] uppercase tracking-widest text-muted font-bold block">
+                              Academic Term (English)
+                            </span>
+                            <h2 className="text-3xl font-extrabold font-heading text-foreground group-hover:text-accent transition-colors">
+                              {savedVocabList[flashcardIndex].word}
+                            </h2>
+                            <span className="text-xs text-muted block mt-2">
+                              Tap to flip for meaning &amp; {nativeLanguage} translation
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 max-w-md">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider text-muted font-bold block">
+                                Definition
+                              </span>
+                              <p className="text-sm font-semibold text-foreground mt-1">
+                                {savedVocabList[flashcardIndex].meaning_en}
+                              </p>
+                            </div>
+
+                            {savedVocabList[flashcardIndex].meaning_native && (
+                              <div className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 text-xs font-medium text-accent">
+                                💡 <strong>{nativeLanguage}:</strong> {savedVocabList[flashcardIndex].meaning_native}
+                              </div>
+                            )}
+
+                            {savedVocabList[flashcardIndex].example_sentence && (
+                              <div className="text-xs text-muted italic">
+                                &ldquo;{savedVocabList[flashcardIndex].example_sentence}&rdquo;
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Spaced Repetition Rating Buttons */}
+                      <div className="w-full space-y-2">
+                        <span className="text-[11px] text-muted text-center block">
+                          How well do you know this word? (Adjusts next review interval)
+                        </span>
+                        <div className="grid grid-cols-4 gap-2">
+                          <button
+                            type="button"
+                            disabled={isReviewingCard}
+                            onClick={() => handleReviewCard("again")}
+                            className="py-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white font-bold text-xs transition-colors"
+                          >
+                            <span className="block font-heading">Again</span>
+                            <span className="text-[10px] font-normal opacity-80">1 hr</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isReviewingCard}
+                            onClick={() => handleReviewCard("hard")}
+                            className="py-2.5 rounded-xl bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white font-bold text-xs transition-colors"
+                          >
+                            <span className="block font-heading">Hard</span>
+                            <span className="text-[10px] font-normal opacity-80">1 day</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isReviewingCard}
+                            onClick={() => handleReviewCard("good")}
+                            className="py-2.5 rounded-xl bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white font-bold text-xs transition-colors"
+                          >
+                            <span className="block font-heading">Good</span>
+                            <span className="text-[10px] font-normal opacity-80">3 days</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isReviewingCard}
+                            onClick={() => handleReviewCard("easy")}
+                            className="py-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white font-bold text-xs transition-colors"
+                          >
+                            <span className="block font-heading">Easy</span>
+                            <span className="text-[10px] font-normal opacity-80">7 days</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SAVED WORDS GRID */}
+                  {(!isFlashcardMode || savedVocabList.length === 0) && (
+                    <div className="space-y-4">
+                      {savedVocabList.length === 0 ? (
+                        <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
+                          <BookOpen className="w-8 h-8 text-muted mb-2 opacity-60" />
+                          <h3 className="font-bold font-heading text-sm text-foreground">
+                            No saved vocabulary yet
+                          </h3>
+                          <p className="text-xs text-muted max-w-sm mt-1">
+                            Save new IELTS academic words or harvest them while reading study articles and completing practice tests.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddWordModalOpen(true)}
+                            className="mt-4 px-4 py-2 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:bg-accent-hover transition-colors"
+                          >
+                            + Add Your First Word
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {savedVocabList
+                            .filter(
+                              (v) =>
+                                vocabCategoryFilter === "all" ||
+                                v.topic_category === vocabCategoryFilter
+                            )
+                            .map((item) => (
+                              <div
+                                key={item.id}
+                                className="glass-card rounded-2xl p-5 border border-border hover:border-accent/30 transition-all flex flex-col justify-between space-y-3 group text-xs"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-extrabold font-heading text-base text-foreground group-hover:text-accent transition-colors">
+                                      {item.word}
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-accent/10 text-accent uppercase">
+                                        Lvl {item.mastery_level || 1}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteWord(item.id)}
+                                        className="p-1 rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                        title="Delete word"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <span className="text-[10px] text-muted uppercase font-semibold block">
+                                    {item.topic_category || "General Academic"}
+                                  </span>
+
+                                  <p className="text-muted leading-relaxed font-medium">
+                                    {item.meaning_en}
+                                  </p>
+
+                                  {item.meaning_native && (
+                                    <div className="p-2 rounded-xl bg-accent/5 border border-accent/15 text-[11px] text-accent">
+                                      💡 <strong>{nativeLanguage}:</strong> {item.meaning_native}
+                                    </div>
+                                  )}
+
+                                  {item.example_sentence && (
+                                    <p className="text-[11px] text-muted italic">
+                                      &ldquo;{item.example_sentence}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="pt-2 border-t border-border flex items-center justify-between text-[10px] text-muted">
+                                  <span>
+                                    Next review:{" "}
+                                    {item.next_review_at
+                                      ? new Date(item.next_review_at).toLocaleDateString()
+                                      : "Ready now"}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* Also show Auto-Harvested Vocabulary from Completed Tests if available */}
+                      {studyVocabulary.length > 0 && (
+                        <div className="mt-8 pt-6 border-t border-border space-y-3">
+                          <h3 className="font-bold font-heading text-sm text-foreground flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-accent" />
+                            <span>Auto-Harvested Test Takeaways ({studyVocabulary.length})</span>
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {studyVocabulary.map((item) => (
+                              <div
+                                key={item.id}
+                                className="glass-card rounded-2xl p-4 border border-border text-xs space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <strong className="text-foreground">{item.title_en}</strong>
+                                  <span className="text-[10px] text-muted">{item.category}</span>
+                                </div>
+                                <p className="text-muted">{item.content_en}</p>
+                                {(item.display_explanation || item.explanation_native) && (
+                                  <div className="p-2 rounded-lg bg-accent/5 text-[11px] text-accent">
+                                    💡 {item.display_explanation || item.explanation_native}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Add Word Modal */}
+                  <AnimatePresence>
+                    {isAddWordModalOpen && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                          transition={iosSpring}
+                          className="glass-card w-full max-w-md rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl overflow-hidden bg-surface/95 backdrop-blur-xl p-6 space-y-4"
+                        >
+                          <div className="flex items-center justify-between border-b border-border pb-3">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="w-5 h-5 text-accent" />
+                              <h2 className="text-base font-bold font-heading text-foreground">
+                                Add to Vocabulary Hub
+                              </h2>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsAddWordModalOpen(false)}
+                              className="p-1 rounded-lg text-muted hover:text-foreground"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          <form onSubmit={handleSaveManualWord} className="space-y-3 text-xs">
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1">
+                                Academic Term / Word *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={newWord}
+                                onChange={(e) => setNewWord(e.target.value)}
+                                placeholder="e.g. Ubiquitous, Proliferate, Deteriorate"
+                                className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1">
+                                Topic Category
+                              </label>
+                              <select
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              >
+                                <option value="General Academic">General Academic</option>
+                                <option value="Environment & Climate">Environment & Climate</option>
+                                <option value="Technology & AI">Technology & AI</option>
+                                <option value="Education">Education</option>
+                                <option value="Health">Health</option>
+                                <option value="Work & Economy">Work & Economy</option>
+                                <option value="Writing Task 1 — Trends">Writing Task 1 — Trends</option>
+                                <option value="Linking & Academic Phrases">Linking & Academic Phrases</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1">
+                                English Meaning *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={newMeaningEn}
+                                onChange={(e) => setNewMeaningEn(e.target.value)}
+                                placeholder="e.g. Present, appearing, or found everywhere."
+                                className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1">
+                                Native Meaning ({nativeLanguage})
+                              </label>
+                              <input
+                                type="text"
+                                value={newMeaningNative}
+                                onChange={(e) => setNewMeaningNative(e.target.value)}
+                                placeholder={`Translation in ${nativeLanguage}`}
+                                className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1">
+                                Example Sentence
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={newExample}
+                                onChange={(e) => setNewExample(e.target.value)}
+                                placeholder="e.g. Mobile connectivity has become ubiquitous across contemporary urban societies."
+                                className="w-full px-3 py-2 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent resize-none"
+                              />
+                            </div>
+
+                            <div className="pt-3 flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsAddWordModalOpen(false)}
+                                className="px-4 py-2 rounded-xl text-muted hover:text-foreground font-medium"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={isSavingManualWord}
+                                className="px-5 py-2 rounded-xl bg-[#E31837] text-white font-bold shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-1.5 disabled:opacity-50"
+                              >
+                                {isSavingManualWord ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Plus className="w-4 h-4" />
+                                )}
+                                <span>Save Word</span>
+                              </button>
+                            </div>
+                          </form>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* SUB-TAB: STUDY ARTICLES & GUIDES */}
+              {assetSubTab === "articles" && (
+                <div className="space-y-4">
+                  {studentArticles.length === 0 ? (
                     <div className="glass-card rounded-3xl p-10 text-center border border-border flex flex-col items-center justify-center">
-                      <BookOpen className="w-8 h-8 text-muted mb-2 opacity-60" />
+                      <BookMarked className="w-8 h-8 text-muted mb-2 opacity-60" />
                       <h3 className="font-bold font-heading text-sm text-foreground">
-                        No vocabulary takeaways unlocked yet
+                        No Study Articles Published Yet
                       </h3>
                       <p className="text-xs text-muted max-w-sm mt-1">
-                        Complete any writing practice task to automatically harvest high-level collocations.
+                        Our examiners regularly publish Band 9 blueprints and cohesion breakdowns. Check back soon.
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {studyVocabulary.map((item) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {studentArticles.map((art) => (
                         <div
-                          key={item.id}
-                          className="glass-card rounded-2xl p-5 border border-border hover:border-accent/30 transition-all space-y-2 text-xs"
+                          key={art.id}
+                          className="glass-card rounded-3xl p-5 border border-border hover:border-accent/40 transition-all flex flex-col justify-between group shadow-sm"
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="font-extrabold font-heading text-base text-foreground">
-                              {item.title_en}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-surfaceSecondary text-muted">
-                              {item.category}
-                            </span>
-                          </div>
-                          <p className="text-muted leading-relaxed">{item.content_en}</p>
-                          {(item.display_explanation || item.explanation_native) && (
-                            <div className="p-2.5 rounded-xl bg-accent/5 border border-accent/15 text-[11px] text-accent">
-                              💡 <strong>{nativeLanguage}:</strong> {item.display_explanation || item.explanation_native}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-accent/10 text-accent uppercase tracking-wider">
+                                {art.category}
+                              </span>
+                              <span className="text-[11px] text-muted flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                <span>{art.read_time_minutes} min read</span>
+                              </span>
                             </div>
-                          )}
+
+                            <h3 className="font-bold font-heading text-sm text-foreground group-hover:text-accent transition-colors line-clamp-2">
+                              {art.title}
+                            </h3>
+
+                            <p className="text-xs text-muted line-clamp-3 leading-relaxed">
+                              {art.content_md.slice(0, 160)}...
+                            </p>
+                          </div>
+
+                          <div className="mt-5 pt-3 border-t border-border flex items-center justify-between">
+                            <span className="text-[11px] text-muted">
+                              By {art.author || "MK.Studio Academic"}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setReadingArticle(art)}
+                              className="px-3 py-1.5 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:bg-accent-hover transition-colors flex items-center gap-1"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Read &bull; One-Click Learn</span>
+                            </button>
+                          </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Interactive Article Reading Modal */}
+                  <AnimatePresence>
+                    {readingArticle && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-md">
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                          transition={iosSpring}
+                          className="glass-card w-full max-w-3xl max-h-[92vh] flex flex-col rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl overflow-hidden bg-surface/95 backdrop-blur-xl"
+                        >
+                          {/* Modal Header */}
+                          <div className="p-5 border-b border-border flex items-center justify-between shrink-0">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-accent/10 text-accent uppercase">
+                                  {readingArticle.category}
+                                </span>
+                                <span className="text-[11px] text-muted flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{readingArticle.read_time_minutes} min read</span>
+                                </span>
+                              </div>
+                              <h2 className="text-base sm:text-lg font-bold font-heading text-foreground">
+                                {readingArticle.title}
+                              </h2>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReadingArticle(null);
+                                setSelectedWordLookup(null);
+                                setTooltipPos(null);
+                              }}
+                              className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surfaceSecondary"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Instructions Banner */}
+                          <div className="px-5 py-2.5 bg-accent/5 border-b border-accent/15 text-[11px] text-accent flex items-center gap-2">
+                            <Lightbulb className="w-4 h-4 shrink-0" />
+                            <span>
+                              <strong>Interactive Reader:</strong> Click any English word to view Cambridge definition, {nativeLanguage} translation, and save it to your vocabulary hub!
+                            </span>
+                          </div>
+
+                          {/* Article Body with Clickable Words */}
+                          <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs sm:text-sm text-foreground/90 leading-relaxed font-sans">
+                            {readingArticle.content_md.split("\n\n").map((para, pIdx) => (
+                              <p key={pIdx}>
+                                {para.split(/(\s+)/).map((segment, sIdx) => {
+                                  const isWord = /^[a-zA-Z]+[a-zA-Z-]*[a-zA-Z]*$/.test(
+                                    segment.replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "")
+                                  );
+
+                                  if (!isWord || segment.trim().length === 0) {
+                                    return <span key={sIdx}>{segment}</span>;
+                                  }
+
+                                  return (
+                                    <span
+                                      key={sIdx}
+                                      onClick={(e) => handleWordClickInArticle(segment, para, e)}
+                                      className="cursor-pointer hover:bg-accent/20 hover:text-accent rounded px-0.5 transition-colors underline decoration-dotted decoration-muted hover:decoration-accent"
+                                      title="Click to lookup definition & save"
+                                    >
+                                      {segment}
+                                    </span>
+                                  );
+                                })}
+                              </p>
+                            ))}
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Floating Word Lookup Glass Tooltip */}
+                  {tooltipPos && (isLookingUpWord || selectedWordLookup) && (
+                    <div
+                      style={{
+                        position: "fixed",
+                        left: Math.min(window.innerWidth - 320, Math.max(20, tooltipPos.x - 120)),
+                        top: Math.min(window.innerHeight - 200, tooltipPos.y),
+                      }}
+                      className="z-[60] w-80 glass-card rounded-2xl p-4 border border-accent/40 shadow-2xl bg-surface/98 backdrop-blur-2xl text-xs space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold font-heading text-sm text-foreground">
+                          {selectedWordLookup?.word || "Looking up..."}
+                        </span>
+                        {selectedWordLookup?.part_of_speech && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent/10 text-accent italic">
+                            {selectedWordLookup.part_of_speech}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setTooltipPos(null)}
+                          className="p-1 rounded text-muted hover:text-foreground"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {isLookingUpWord ? (
+                        <div className="py-4 text-center flex items-center justify-center gap-2 text-muted">
+                          <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                          <span>Consulting AI Lexicon...</span>
+                        </div>
+                      ) : selectedWordLookup ? (
+                        <div className="space-y-2">
+                          <p className="text-muted leading-relaxed">
+                            {selectedWordLookup.definition_en}
+                          </p>
+
+                          {selectedWordLookup.definition_native && (
+                            <div className="p-2 rounded-xl bg-accent/10 border border-accent/20 text-[11px] text-accent">
+                              💡 <strong>{nativeLanguage}:</strong> {selectedWordLookup.definition_native}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={handleSaveWordFromLookup}
+                            disabled={isSavingWordFromArticle || wordSavedSuccess === selectedWordLookup.word}
+                            className="w-full py-2 rounded-xl bg-[#E31837] text-white font-bold text-xs shadow-sm hover:bg-[#BE123C] flex items-center justify-center gap-1.5 transition-all disabled:opacity-60"
+                          >
+                            {wordSavedSuccess === selectedWordLookup.word ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Saved to Vocabulary!</span>
+                              </>
+                            ) : isSavingWordFromArticle ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Saving...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>+ Save to Vocabulary Hub</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -2578,97 +3950,199 @@ export default function StudentDashboard() {
           )}
 
           {/* -------------------------------------------------------------------
-              TAB 6: DEEPSTUDY AI DIAGNOSTICS
+              TAB 6: DEEPSTUDY AI WRITING TUTOR
           ------------------------------------------------------------------- */}
           {activeTab === "deepstudy" && (
             <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
-                  DeepStudy AI Diagnostic
-                </h1>
-                <p className="text-xs sm:text-sm text-muted mt-0.5">
-                  Multi-criterion Band diagnostics and tailored sentence corrections in {nativeLanguage}.
-                </p>
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight flex items-center gap-2.5">
+                    <Sparkles className="w-7 h-7 text-accent" />
+                    <span>DeepStudy AI Writing Tutor</span>
+                  </h1>
+                  <p className="text-xs sm:text-sm text-muted mt-0.5">
+                    Cambridge-calibrated examiner AI &bull; Brainstorm, refine thesis statements, and master IELTS collocations in {nativeLanguage}.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Free AI Rotation Online</span>
+                  </span>
+                </div>
               </div>
 
-              {completedSubmissions.length === 0 ? (
-                <div className="glass-card rounded-3xl p-12 text-center flex flex-col items-center">
-                  <Sparkles className="w-10 h-10 text-accent mb-3 opacity-80" />
-                  <h3 className="text-base font-bold font-heading text-foreground mb-1">
-                    No Evaluation Data Yet
+              {/* Mode Selection Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+                {[
+                  { id: "general", label: "General Coach", icon: Bot },
+                  { id: "brainstorm", label: "Essay Brainstorming", icon: Lightbulb },
+                  { id: "thesis", label: "Thesis Feedback", icon: Target },
+                  { id: "paraphrase", label: "Paraphrasing Tool", icon: RefreshCw },
+                  { id: "grammar", label: "Grammar Clinic", icon: Layers },
+                ].map((mode) => {
+                  const Icon = mode.icon;
+                  const isSelected = aiTutorMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setAiTutorMode(mode.id as any)}
+                      className={`px-3.5 py-2 rounded-xl font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                        isSelected
+                          ? "bg-[#E31837] text-white shadow-md shadow-[#E31837]/25"
+                          : "glass-pill text-muted hover:text-foreground border border-border"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{mode.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Lockdown Notice if Exam in progress */}
+              {isLocked ? (
+                <div className="glass-card rounded-3xl p-10 border border-red-500/30 text-center flex flex-col items-center justify-center space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center">
+                    <ShieldAlert className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-base font-bold font-heading text-foreground">
+                    Examination Lockdown Active ({formatCountdown(remainingLockSeconds)})
                   </h3>
-                  <p className="text-xs text-muted max-w-sm mb-5 leading-relaxed">
-                    Complete your first IELTS exam simulation to unlock personalized AI criterion diagnostics, vocabulary suggestions, and Band trajectories.
+                  <p className="text-xs text-muted max-w-md leading-relaxed">
+                    DeepStudy AI Tutor is strictly disabled during active timed examinations to ensure complete testing integrity and authentic exam simulation.
                   </p>
-                  <button
-                    onClick={() => {
-                      setActiveTab("practice");
-                      setPracticeFolder("all");
-                    }}
-                    className="px-4 py-2 rounded-xl bg-accent text-white font-semibold text-xs shadow-md shadow-accent/25 hover:bg-accent-hover transition-colors"
-                  >
-                    Start a Practice Test
-                  </button>
+                  <span className="text-[11px] text-accent font-semibold">
+                    Access will automatically unlock when cooldown completes.
+                  </span>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Criterion Diagnostic Card */}
-                  <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
-                    <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
-                      <Target className="w-4 h-4 text-accent" />
-                      <span>Cambridge Criterion Mastery</span>
-                    </h2>
-
-                    <div className="space-y-3 text-xs">
-                      {[
-                        { label: "Task Achievement / Response", target: "Band 7.5+", score: "7.0" },
-                        { label: "Coherence & Cohesion", target: "Band 8.0+", score: "7.5" },
-                        { label: "Lexical Resource", target: "Band 8.0+", score: "7.0" },
-                        { label: "Grammatical Range & Accuracy", target: "Band 7.5+", score: "6.5" },
-                      ].map((crit, idx) => (
-                        <div key={idx} className="p-3.5 rounded-2xl bg-surfaceSecondary/60 border border-border">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="font-bold text-foreground">{crit.label}</span>
-                            <span className="text-[11px] font-semibold text-accent">
-                              Estimated Band {crit.score}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-muted">
-                            Target benchmark: <strong>{crit.target}</strong>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                <div className="space-y-4">
+                  {/* Quick Prompt Suggestions */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 text-[11px]">
+                    <span className="text-muted font-bold uppercase tracking-wider shrink-0 text-[10px]">
+                      Quick Prompts:
+                    </span>
+                    {[
+                      {
+                        label: "Brainstorm: AI in Higher Education",
+                        text: "Brainstorm 3 balanced arguments for IELTS Task 2: Artificial Intelligence in Higher Education (advantages vs drawbacks).",
+                      },
+                      {
+                        label: "Critique Thesis: Remote Work",
+                        text: "Critique my thesis statement: Although remote working reduces commuting stress, the erosion of team synergy poses a graver challenge to corporate productivity.",
+                      },
+                      {
+                        label: "Paraphrase: Task 1 Trend",
+                        text: "Paraphrase this Task 1 opening sentence: The chart illustrates the significant increase in renewable energy production in five European nations between 2010 and 2024.",
+                      },
+                      {
+                        label: "GRA: Participle Clauses",
+                        text: "How can I combine these sentences using an introductory participle clause: The government invested heavily in clean transport. They noticed an immediate decline in particulate pollution.",
+                      },
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setAiTutorInput(p.text)}
+                        className="px-3 py-1.5 rounded-xl glass-pill border border-border/80 text-muted hover:text-foreground hover:border-accent/40 whitespace-nowrap transition-colors shrink-0"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
                   </div>
 
-                  {/* AI Study Recommendations */}
-                  <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
-                    <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-purple-500" />
-                      <span>AI Preparation Plan &bull; {nativeLanguage}</span>
-                    </h2>
+                  {/* Chat Container */}
+                  <div className="glass-card rounded-3xl border border-border flex flex-col h-[520px] overflow-hidden shadow-lg">
+                    {/* Chat Messages Feed */}
+                    <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                      {aiTutorMessages.map((msg, idx) => {
+                        const isUser = msg.role === "user";
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1 text-[10px] text-muted">
+                              {!isUser && (
+                                <span className="font-bold text-accent flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>DeepStudy Examiner</span>
+                                </span>
+                              )}
+                              <span>{msg.timestamp}</span>
+                            </div>
 
-                    <div className="space-y-3 text-xs leading-relaxed text-muted">
-                      <div className="p-3.5 rounded-2xl bg-surfaceSecondary/60 border border-border">
-                        <strong className="text-foreground block mb-1">
-                          1. Enhance Syntactic Complexity:
-                        </strong>
-                        Practice combining simple clauses into complex non-finite clauses (e.g. participle clauses like &ldquo;Having analyzed the data...&rdquo;) to reach Band 8.0 in GRA.
-                      </div>
+                            <div
+                              className={`rounded-2xl p-4 leading-relaxed max-w-[85%] sm:max-w-[75%] whitespace-pre-wrap ${
+                                isUser
+                                  ? "bg-[#E31837] text-white shadow-md shadow-[#E31837]/25 font-medium"
+                                  : "glass-card border border-border bg-surfaceSecondary/60 text-foreground"
+                              }`}
+                            >
+                              {msg.content}
+                            </div>
+                          </div>
+                        );
+                      })}
 
-                      <div className="p-3.5 rounded-2xl bg-surfaceSecondary/60 border border-border">
-                        <strong className="text-foreground block mb-1">
-                          2. Avoid Redundant Cohesive Ties:
-                        </strong>
-                        Do not overuse mechanical transitionals like &ldquo;Moreover&rdquo; or &ldquo;Furthermore&rdquo; at the start of every sentence. Let sentence theme progression carry the cohesion.
-                      </div>
+                      {isAiTutorThinking && (
+                        <div className="flex flex-col items-start space-y-1">
+                          <span className="text-[10px] text-muted font-bold text-accent flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" />
+                            <span>DeepStudy Examiner</span>
+                          </span>
+                          <div className="glass-card border border-border rounded-2xl p-4 text-muted flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                            <span className="text-xs">Analyzing with Cambridge Writing Rubric...</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="p-3.5 rounded-2xl bg-surfaceSecondary/60 border border-border">
-                        <strong className="text-foreground block mb-1">
-                          3. Master Overview in Task 1:
-                        </strong>
-                        Keep raw statistics strictly out of the overview paragraph. The overview should convey overarching polarity and extremities only.
-                      </div>
+                    {/* Chat Input Bar */}
+                    <div className="p-3.5 border-t border-border bg-surfaceSecondary/40 flex items-center gap-2.5">
+                      <input
+                        type="text"
+                        value={aiTutorInput}
+                        disabled={isAiTutorThinking}
+                        onChange={(e) => setAiTutorInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendAiTutorMessage();
+                          }
+                        }}
+                        placeholder={
+                          aiTutorMode === "brainstorm"
+                            ? "Enter an IELTS essay topic to brainstorm ideas..."
+                            : aiTutorMode === "thesis"
+                            ? "Paste your thesis statement for band evaluation..."
+                            : aiTutorMode === "paraphrase"
+                            ? "Paste a sentence or Task 1 prompt to paraphrase..."
+                            : aiTutorMode === "grammar"
+                            ? "Ask a grammar question or paste a sentence to polish..."
+                            : "Ask any IELTS Academic Writing question..."
+                        }
+                        className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-surface text-foreground text-xs focus:outline-none focus:border-accent transition-all placeholder:text-muted"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={handleSendAiTutorMessage}
+                        disabled={!aiTutorInput.trim() || isAiTutorThinking}
+                        className="px-4 py-2.5 rounded-xl bg-[#E31837] text-white font-bold text-xs shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
+                      >
+                        {isAiTutorThinking ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                        <span className="hidden sm:inline">Send</span>
+                      </button>
                     </div>
                   </div>
                 </div>

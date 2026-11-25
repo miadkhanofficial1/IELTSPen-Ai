@@ -129,3 +129,65 @@ CREATE TABLE IF NOT EXISTS student_study_assets (
     INDEX idx_study_assets_user (user_id),
     INDEX idx_study_assets_title (title_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9. Saved Vocabulary with Spaced Repetition Mastery
+CREATE TABLE IF NOT EXISTS saved_vocabulary (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    word VARCHAR(191) NOT NULL,
+    meaning_en TEXT NOT NULL,
+    meaning_native TEXT NULL,
+    example_sentence TEXT NULL,
+    topic_category VARCHAR(100) NOT NULL DEFAULT 'General Academic',
+    mastery_level INT NOT NULL DEFAULT 1,
+    next_review_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_vocab_user (user_id),
+    INDEX idx_vocab_user_word (user_id, word),
+    INDEX idx_vocab_category (topic_category),
+    INDEX idx_vocab_review (next_review_at),
+    CONSTRAINT fk_vocab_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10. Study Calendar Events
+CREATE TABLE IF NOT EXISTS study_events (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    category ENUM('Study', 'Exam Date', 'To-do', 'Goals') NOT NULL DEFAULT 'Study',
+    event_date DATE NOT NULL,
+    start_time VARCHAR(10) NULL,
+    end_time VARCHAR(10) NULL,
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_events_user_date (user_id, event_date),
+    CONSTRAINT fk_events_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11. Daily Reflections & Goals Journal
+CREATE TABLE IF NOT EXISTS daily_reflections (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    reflection_date DATE NOT NULL,
+    reflection_text TEXT NOT NULL,
+    daily_goal TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_reflection_date (user_id, reflection_date),
+    INDEX idx_reflections_user (user_id),
+    CONSTRAINT fk_reflections_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 12. Authentic Study Articles & Guides
+CREATE TABLE IF NOT EXISTS study_articles (
+    id VARCHAR(36) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    content_md MEDIUMTEXT NOT NULL,
+    read_time_minutes INT NOT NULL DEFAULT 5,
+    author VARCHAR(191) NOT NULL DEFAULT 'MD. MIAD IBNA NOOR',
+    published_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_articles_category (category),
+    INDEX idx_articles_published (published_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

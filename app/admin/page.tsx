@@ -51,6 +51,7 @@ import {
   FileUp,
   File,
   Upload,
+  BookOpen,
 } from "lucide-react";
 import {
   WritingTask,
@@ -59,6 +60,7 @@ import {
   AiApiKeyRecord as AiApiKey,
   AiProvider,
   FreeAssetFile,
+  StudyArticle,
 } from "@/lib/types";
 
 export default function AdminDashboardPage() {
@@ -79,6 +81,17 @@ export default function AdminDashboardPage() {
   const [uploadCategory, setUploadCategory] = useState<string>("Cheat Sheet");
   const [uploadDescription, setUploadDescription] = useState<string>("");
   const [previewAssetFile, setPreviewAssetFile] = useState<FreeAssetFile | null>(null);
+
+  // Study Articles State
+  const [assetActiveSubTab, setAssetActiveSubTab] = useState<"files" | "articles">("files");
+  const [adminArticles, setAdminArticles] = useState<StudyArticle[]>([]);
+  const [isLoadingArticles, setIsLoadingArticles] = useState<boolean>(false);
+  const [isArticleModalOpen, setIsArticleModalOpen] = useState<boolean>(false);
+  const [articleTitle, setArticleTitle] = useState<string>("");
+  const [articleCategory, setArticleCategory] = useState<string>("Band 9 Strategies");
+  const [articleContent, setArticleContent] = useState<string>("");
+  const [articleReadTime, setArticleReadTime] = useState<number>(5);
+  const [isCreatingArticle, setIsCreatingArticle] = useState<boolean>(false);
 
   // Admin user state
   const [adminUser, setAdminUser] = useState<any>(null);
@@ -258,6 +271,17 @@ export default function AdminDashboardPage() {
           }
         } catch (e) {
           console.warn("Could not load asset files:", e);
+        }
+
+        // Load study articles
+        try {
+          const artRes = await fetch("/api/admin/articles");
+          if (artRes.ok) {
+            const artData = await artRes.json();
+            if (artData.articles) setAdminArticles(artData.articles);
+          }
+        } catch (e) {
+          console.warn("Could not load study articles:", e);
         }
       } catch (err) {
         console.error("Error loading admin data:", err);
@@ -694,6 +718,68 @@ export default function AdminDashboardPage() {
       if (previewAssetFile?.id === assetId) setPreviewAssetFile(null);
     } catch (err) {
       alert("Failed to delete asset.");
+    }
+  };
+
+  // 13. Study Articles Handlers
+  const loadAdminArticles = async () => {
+    setIsLoadingArticles(true);
+    try {
+      const res = await fetch("/api/admin/articles");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.articles) setAdminArticles(data.articles);
+      }
+    } catch (e) {
+      console.warn("Failed to load articles:", e);
+    } finally {
+      setIsLoadingArticles(false);
+    }
+  };
+
+  const handleCreateArticle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!articleTitle.trim() || !articleContent.trim()) return;
+    setIsCreatingArticle(true);
+    try {
+      const res = await fetch("/api/admin/articles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: articleTitle.trim(),
+          category: articleCategory,
+          content_md: articleContent.trim(),
+          read_time_minutes: articleReadTime,
+        }),
+      });
+
+      if (res.ok) {
+        setIsArticleModalOpen(false);
+        setArticleTitle("");
+        setArticleContent("");
+        await loadAdminArticles();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to publish article.");
+      }
+    } catch (err) {
+      alert("Error publishing article.");
+    } finally {
+      setIsCreatingArticle(false);
+    }
+  };
+
+  const handleDeleteArticle = async (articleId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this study article?")) return;
+    try {
+      const res = await fetch(`/api/admin/articles?id=${articleId}`, { method: "DELETE" });
+      if (res.ok) {
+        setAdminArticles((prev) => prev.filter((a) => a.id !== articleId));
+      } else {
+        alert("Failed to delete article.");
+      }
+    } catch (err) {
+      alert("Error deleting article.");
     }
   };
 
@@ -1465,11 +1551,54 @@ export default function AdminDashboardPage() {
 
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-accent/10 text-accent border border-accent/20">
-                  {assetFiles.length} Total Materials
+                  {assetFiles.length + adminArticles.length} Total Materials
                 </span>
               </div>
             </div>
 
+            {/* Sub-Tab Navigation */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+              <div className="flex items-center gap-2 p-1 rounded-2xl bg-surfaceSecondary border border-border">
+                <button
+                  type="button"
+                  onClick={() => setAssetActiveSubTab("files")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    assetActiveSubTab === "files"
+                      ? "bg-[#E31837] text-white shadow-md shadow-[#E31837]/25"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <FolderDown className="w-4 h-4" />
+                  <span>Study Files & PDFs ({assetFiles.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssetActiveSubTab("articles")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    assetActiveSubTab === "articles"
+                      ? "bg-[#E31837] text-white shadow-md shadow-[#E31837]/25"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Study Articles & Guides ({adminArticles.length})</span>
+                </button>
+              </div>
+
+              {assetActiveSubTab === "articles" && (
+                <button
+                  type="button"
+                  onClick={() => setIsArticleModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-[#E31837] text-white text-xs font-bold shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-2 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Write New Article</span>
+                </button>
+              )}
+            </div>
+
+            {assetActiveSubTab === "files" && (
+              <>
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="glass-card rounded-2xl p-4 border border-border">
@@ -1796,6 +1925,232 @@ export default function AdminDashboardPage() {
                 </div>
               )}
             </AnimatePresence>
+            </>
+            )}
+
+            {/* SUBTAB: STUDY ARTICLES */}
+            {assetActiveSubTab === "articles" && (
+              <div className="space-y-6">
+                {/* Articles Quick Metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div className="glass-card rounded-2xl p-4 border border-border">
+                    <span className="text-[11px] font-medium text-muted block">Published Articles</span>
+                    <span className="text-xl font-extrabold font-heading text-foreground mt-0.5 block">
+                      {adminArticles.length}
+                    </span>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4 border border-border">
+                    <span className="text-[11px] font-medium text-muted block">Topics / Categories</span>
+                    <span className="text-xl font-extrabold font-heading text-purple-500 mt-0.5 block">
+                      {new Set(adminArticles.map((a) => a.category)).size}
+                    </span>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4 border border-border">
+                    <span className="text-[11px] font-medium text-muted block">Total Reading Time</span>
+                    <span className="text-xl font-extrabold font-heading text-accent mt-0.5 block">
+                      {adminArticles.reduce((acc, a) => acc + (a.read_time_minutes || 0), 0)} min
+                    </span>
+                  </div>
+                </div>
+
+                {/* Articles List / Empty State */}
+                {adminArticles.length === 0 ? (
+                  <div className="glass-card rounded-3xl p-12 text-center flex flex-col items-center border border-border">
+                    <div className="w-16 h-16 rounded-2xl bg-accent/10 text-accent flex items-center justify-center mb-4">
+                      <BookOpen className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-base font-bold font-heading text-foreground mb-1">
+                      No Study Articles Published Yet
+                    </h3>
+                    <p className="text-xs text-muted max-w-md mx-auto mb-5">
+                      Publish authentic Band 9 essay breakdowns, scoring blueprints, and cohesion guides for students to read and harvest vocabulary.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsArticleModalOpen(true)}
+                      className="px-5 py-2.5 rounded-2xl bg-[#E31837] text-white font-bold text-xs shadow-lg shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-2 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Write First Article</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {adminArticles.map((art) => (
+                      <div
+                        key={art.id}
+                        className="glass-card rounded-3xl p-5 border border-border flex flex-col justify-between hover:border-accent/40 transition-all group"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-accent/10 text-accent uppercase tracking-wider">
+                              {art.category}
+                            </span>
+                            <span className="text-[11px] text-muted flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>{art.read_time_minutes} min read</span>
+                            </span>
+                          </div>
+
+                          <h3 className="text-sm font-bold font-heading text-foreground group-hover:text-accent transition-colors line-clamp-2">
+                            {art.title}
+                          </h3>
+
+                          <p className="text-xs text-muted line-clamp-3 leading-relaxed">
+                            {art.content_md.slice(0, 180)}...
+                          </p>
+                        </div>
+
+                        <div className="mt-5 pt-4 border-t border-border flex items-center justify-between">
+                          <span className="text-[11px] text-muted">
+                            {art.created_at ? new Date(art.created_at).toLocaleDateString() : "Recently"}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteArticle(art.id)}
+                            className="p-2 rounded-xl text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                            title="Delete Article"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Article Creation Modal */}
+                <AnimatePresence>
+                  {isArticleModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md">
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        transition={iosSpring}
+                        className="glass-card w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-white/20 dark:border-white/10 shadow-2xl overflow-hidden bg-surface/95 backdrop-blur-xl"
+                      >
+                        <div className="p-5 border-b border-border flex items-center justify-between shrink-0">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h2 className="text-base font-bold font-heading text-foreground">
+                                Publish New Study Article
+                              </h2>
+                              <p className="text-[11px] text-muted">
+                                Write an IELTS guide or essay analysis for students.
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsArticleModalOpen(false)}
+                            className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surfaceSecondary"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleCreateArticle} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1.5">
+                              Article Title *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={articleTitle}
+                              onChange={(e) => setArticleTitle(e.target.value)}
+                              placeholder="e.g., Band 9 Structure: Cohesion & Sentence Complexity"
+                              className="w-full px-4 py-2.5 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1.5">
+                                Category *
+                              </label>
+                              <select
+                                value={articleCategory}
+                                onChange={(e) => setArticleCategory(e.target.value)}
+                                className="w-full px-4 py-2.5 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              >
+                                <option value="Band 9 Strategies">Band 9 Strategies</option>
+                                <option value="Task 1 Visual Data">Task 1 Visual Data</option>
+                                <option value="Task 2 Arguments">Task 2 Arguments</option>
+                                <option value="Vocabulary & Collocations">Vocabulary & Collocations</option>
+                                <option value="Grammar & Cohesion">Grammar & Cohesion</option>
+                                <option value="Exam Day Tips">Exam Day Tips</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold text-foreground mb-1.5">
+                                Estimated Read Time (Minutes)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={articleReadTime}
+                                onChange={(e) => setArticleReadTime(Number(e.target.value) || 5)}
+                                className="w-full px-4 py-2.5 rounded-xl border border-border bg-surfaceSecondary text-foreground focus:outline-none focus:border-accent"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block font-semibold text-foreground mb-1.5">
+                              Article Content (Markdown supported) *
+                            </label>
+                            <textarea
+                              rows={10}
+                              required
+                              value={articleContent}
+                              onChange={(e) => setArticleContent(e.target.value)}
+                              placeholder="Write your article content here in Markdown. Students can click any word while reading to see native translation and save to vocabulary..."
+                              className="w-full px-4 py-3 rounded-xl border border-border bg-surfaceSecondary text-foreground font-mono focus:outline-none focus:border-accent resize-y"
+                            />
+                          </div>
+
+                          <div className="pt-2 flex items-center justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setIsArticleModalOpen(false)}
+                              className="px-4 py-2 rounded-xl text-muted hover:text-foreground font-medium"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isCreatingArticle}
+                              className="px-5 py-2.5 rounded-xl bg-[#E31837] text-white font-bold shadow-md shadow-[#E31837]/25 hover:bg-[#BE123C] flex items-center gap-2 disabled:opacity-50"
+                            >
+                              {isCreatingArticle ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span>Publishing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-4 h-4" />
+                                  <span>Publish Article</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </form>
+                      </motion.div>
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         )}
 

@@ -168,3 +168,62 @@ export interface StudyAsset {
   display_explanation?: string;
   created_at: string;
 }
+
+export interface SavedVocabularyItem {
+  id: string;
+  user_id: string;
+  word: string;
+  meaning_en: string;
+  meaning_native?: string | null;
+  example_sentence?: string | null;
+  topic_category: string;
+  mastery_level: number;
+  next_review_at: string;
+  created_at: string;
+}
+
+export type StudyEventCategory = "Study" | "Exam Date" | "To-do" | "Goals";
+
+export interface StudyEvent {
+  id: string;
+  user_id: string;
+  title: string;
+  category: StudyEventCategory;
+  event_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  is_completed: boolean;
+  created_at: string;
+}
+
+export interface DailyReflection {
+  id: string;
+  user_id: string;
+  reflection_date: string;
+  daily_goal?: string | null;
+  reflection_text: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface StudyArticle {
+  id: string;
+  title: string;
+  category: string;
+  content_md: string;
+  read_time_minutes: number;
+  author: string;
+  published_at?: string | null;
+  created_at: string;
+}
+
+export interface AiTutorMessage {
+  id?: string;
+  role: "user" | "assistant";
+  sender?: "user" | "assistant";
+  content: string;
+  nativeTranslation?: string | null;
+  timestamp?: string;
+  created_at?: string;
+}
+
