@@ -31,6 +31,9 @@ export async function ensureDatabaseInitialized(throwOnError = false): Promise<v
           id VARCHAR(36) PRIMARY KEY,
           full_name VARCHAR(191) NOT NULL DEFAULT '',
           email VARCHAR(191) NOT NULL UNIQUE,
+          username VARCHAR(64) NULL UNIQUE,
+          is_profile_public BOOLEAN NOT NULL DEFAULT TRUE,
+          bio TEXT NULL,
           password_hash VARCHAR(255) NOT NULL,
           role ENUM('student', 'admin') NOT NULL DEFAULT 'student',
           native_language VARCHAR(64) NOT NULL DEFAULT 'English',
@@ -39,6 +42,7 @@ export async function ensureDatabaseInitialized(throwOnError = false): Promise<v
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_users_email (email),
+          INDEX idx_users_username (username),
           INDEX idx_users_role (role)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
@@ -152,6 +156,45 @@ export async function ensureDatabaseInitialized(throwOnError = false): Promise<v
           INDEX idx_study_assets_title (title_en)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
+
+      await execute(`
+        CREATE TABLE IF NOT EXISTS user_achievements (
+          id VARCHAR(36) PRIMARY KEY,
+          user_id VARCHAR(36) NOT NULL,
+          achievement_key VARCHAR(64) NOT NULL,
+          progress INT NOT NULL DEFAULT 0,
+          unlocked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_achievements_user (user_id),
+          UNIQUE KEY uq_user_achievement (user_id, achievement_key),
+          CONSTRAINT fk_achievements_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      // Safe column migrations for existing users table
+      try {
+        await execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(64) NULL");
+      } catch (e) {}
+      try {
+        await execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_profile_public BOOLEAN NOT NULL DEFAULT TRUE");
+      } catch (e) {}
+      try {
+        await execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT NULL");
+      } catch (e) {}
+      try {
+        await execute("ALTER TABLE users ADD UNIQUE INDEX IF NOT EXISTS idx_users_username (username)");
+      } catch (e) {}
+
+      // Auto-populate default usernames for existing users if null
+      try {
+        const usersWithoutUsername = await query<{ id: string; email: string }>(
+          "SELECT id, email FROM users WHERE username IS NULL OR username = ''"
+        );
+        for (const u of usersWithoutUsername) {
+          const baseName = u.email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
+          const username = baseName || `scholar_${u.id.slice(0, 6)}`;
+          await execute("UPDATE users SET username = ? WHERE id = ?", [username, u.id]);
+        }
+      } catch (e) {}
 
       // 2. Seed Default System Settings
       try {

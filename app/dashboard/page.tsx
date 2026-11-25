@@ -57,6 +57,9 @@ import {
   Check,
   Star,
   Compass,
+  Crown,
+  Share2,
+  ExternalLink,
 } from "lucide-react";
 import EvaluationReviewModal from "@/components/results/EvaluationReviewModal";
 import { WritingTask, Submission, FreeAssetFile, StudyAsset } from "@/lib/types";
@@ -82,6 +85,9 @@ export default function StudentDashboard() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState("Scholar");
   const [userEmail, setUserEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [bio, setBio] = useState("");
+  const [isProfilePublic, setIsProfilePublic] = useState(true);
   const [userRole, setUserRole] = useState("student");
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
   const [nativeLanguage, setNativeLanguage] = useState("English");
@@ -118,8 +124,20 @@ export default function StudentDashboard() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "account" | "language">("general");
   const [editFullName, setEditFullName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editIsProfilePublic, setEditIsProfilePublic] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  // Heatmap & Analytics state
+  const [heatmapMetric, setHeatmapMetric] = useState<"tests" | "time">("tests");
+  const [hoveredHeatmapDay, setHoveredHeatmapDay] = useState<{
+    date: string;
+    count: number;
+    minutes: number;
+  } | null>(null);
 
   // Appeal modal state
   const [isAppealModalOpen, setIsAppealModalOpen] = useState(false);
@@ -254,6 +272,22 @@ export default function StudentDashboard() {
             setEditFullName(data.profile.full_name);
           }
           if (data.profile.email) setUserEmail(data.profile.email);
+          if (data.profile.username) {
+            setUsername(data.profile.username);
+            setEditUsername(data.profile.username);
+          } else if (data.profile.email) {
+            const fallback = data.profile.email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
+            setUsername(fallback);
+            setEditUsername(fallback);
+          }
+          if (data.profile.bio) {
+            setBio(data.profile.bio);
+            setEditBio(data.profile.bio);
+          }
+          if (data.profile.is_profile_public !== undefined) {
+            setIsProfilePublic(Boolean(data.profile.is_profile_public));
+            setEditIsProfilePublic(Boolean(data.profile.is_profile_public));
+          }
           if (data.profile.role) setUserRole(data.profile.role);
           if (data.profile.created_at) setUserCreatedAt(data.profile.created_at);
           if (data.profile.native_language) setNativeLanguage(data.profile.native_language);
@@ -349,22 +383,36 @@ export default function StudentDashboard() {
   // 9. Save settings from modal
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
+    setSettingsError(null);
     try {
+      const cleanUsername = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
       const res = await fetch("/api/student/dashboard-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: editFullName.trim(),
+          username: cleanUsername || undefined,
+          bio: editBio.trim(),
+          isProfilePublic: editIsProfilePublic,
           nativeLanguage,
         }),
       });
-      if (res.ok) {
-        setUserName(editFullName.trim() || userName);
-        setSettingsSavedToast(true);
-        setTimeout(() => setSettingsSavedToast(false), 2500);
+
+      const resData = await res.json();
+      if (!res.ok) {
+        setSettingsError(resData.error || "Failed to update profile settings.");
+        return;
       }
-    } catch (err) {
+
+      setUserName(editFullName.trim() || userName);
+      if (cleanUsername) setUsername(cleanUsername);
+      setBio(editBio.trim());
+      setIsProfilePublic(editIsProfilePublic);
+      setSettingsSavedToast(true);
+      setTimeout(() => setSettingsSavedToast(false), 2500);
+    } catch (err: any) {
       console.error("Save settings error:", err);
+      setSettingsError(err.message || "Failed to save settings.");
     } finally {
       setIsSavingSettings(false);
     }
@@ -468,6 +516,280 @@ export default function StudentDashboard() {
     // 20 mins for Task 1, 40 mins for Task 2
     return task1Completed.length * 20 + task2Completed.length * 40;
   }, [task1Completed, task2Completed]);
+
+  // User consecutive streak calculation
+  const userStreak = useMemo(() => {
+    const dates = Array.from(
+      new Set(
+        completedSubmissions
+          .filter((s) => s.created_at)
+          .map((s) => new Date(s.created_at).toISOString().split("T")[0])
+      )
+    ).sort().reverse();
+
+    if (dates.length === 0) return 0;
+    const todayStrIso = new Date().toISOString().split("T")[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStrIso = yesterdayDate.toISOString().split("T")[0];
+
+    if (dates[0] !== todayStrIso && dates[0] !== yesterdayStrIso) return 0;
+
+    let streak = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const prev = new Date(dates[i - 1]);
+      const curr = new Date(dates[i]);
+      const diff = Math.round((prev.getTime() - curr.getTime()) / (1000 * 3600 * 24));
+      if (diff === 1) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [completedSubmissions]);
+
+  // Total words/assets saved
+  const totalWordsSaved = useMemo(() => {
+    return studyVocabulary.length + studyGrammar.length + studyTricks.length;
+  }, [studyVocabulary, studyGrammar, studyTricks]);
+
+  // Highest Band achieved
+  const highestBand = useMemo(() => {
+    if (completedSubmissions.length === 0) return 0;
+    return Math.max(...completedSubmissions.map((s) => Number(s.overall_band) || 0));
+  }, [completedSubmissions]);
+
+  // "Your Week" 7-Day Bar Chart data
+  const weekDaysData = useMemo(() => {
+    const list: Array<{
+      dateStr: string;
+      dayLabel: string;
+      minutes: number;
+      isToday: boolean;
+      testsCount: number;
+    }> = [];
+
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const dayLabel = i === 0 ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" });
+      const isToday = i === 0;
+
+      const daySubs = completedSubmissions.filter((s) => {
+        if (!s.created_at) return false;
+        return new Date(s.created_at).toISOString().split("T")[0] === dateStr;
+      });
+
+      const testsCount = daySubs.length;
+      const minutes = daySubs.reduce((acc, s) => {
+        const dur = Number(s.time_spent_seconds) || 1200;
+        return acc + Math.round(dur / 60);
+      }, 0);
+
+      list.push({ dateStr, dayLabel, minutes, isToday, testsCount });
+    }
+    return list;
+  }, [completedSubmissions]);
+
+  // Chronological Band Trend Data
+  const chronologicalTrend = useMemo(() => {
+    return [...completedSubmissions]
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((s) => {
+        const task = tasks.find((t) => t.id === s.task_id);
+        return {
+          id: s.id,
+          title: task?.title || "Cambridge Simulation",
+          taskType: task?.task_type || "task_2",
+          band: Number(s.overall_band) || 0,
+          wordCount: s.word_count,
+          date: s.created_at,
+        };
+      });
+  }, [completedSubmissions, tasks]);
+
+  // 2026 Heatmap Days & Weeks
+  const heatmapDays = useMemo(() => {
+    const days: Array<{
+      date: string;
+      count: number;
+      minutes: number;
+      month: number;
+      dayOfWeek: number;
+    }> = [];
+
+    const startDate = new Date(2026, 0, 1);
+    const endDate = new Date(2026, 11, 31);
+    const cur = new Date(startDate);
+
+    const dateMap: Record<string, { count: number; minutes: number }> = {};
+    completedSubmissions.forEach((s) => {
+      if (!s.created_at) return;
+      const dStr = new Date(s.created_at).toISOString().split("T")[0];
+      if (!dateMap[dStr]) dateMap[dStr] = { count: 0, minutes: 0 };
+      dateMap[dStr].count += 1;
+      dateMap[dStr].minutes += Math.round((Number(s.time_spent_seconds) || 1200) / 60);
+    });
+
+    while (cur <= endDate) {
+      const dateStr = cur.toISOString().split("T")[0];
+      const activity = dateMap[dateStr];
+      const count = activity?.count || 0;
+      const minutes = activity?.minutes || 0;
+
+      days.push({
+        date: dateStr,
+        count,
+        minutes,
+        month: cur.getMonth(),
+        dayOfWeek: cur.getDay(),
+      });
+
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    return days;
+  }, [completedSubmissions]);
+
+  const heatmapWeeks = useMemo(() => {
+    const weeks: Array<typeof heatmapDays> = [];
+    let currentWeek: typeof heatmapDays = [];
+
+    if (heatmapDays.length > 0) {
+      const firstDayOfWeek = heatmapDays[0].dayOfWeek;
+      for (let i = 0; i < firstDayOfWeek; i++) {
+        currentWeek.push({
+          date: "",
+          count: -1,
+          minutes: 0,
+          month: -1,
+          dayOfWeek: i,
+        });
+      }
+    }
+
+    for (const day of heatmapDays) {
+      currentWeek.push(day);
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
+    }
+
+    if (currentWeek.length > 0) {
+      while (currentWeek.length < 7) {
+        currentWeek.push({
+          date: "",
+          count: -1,
+          minutes: 0,
+          month: -1,
+          dayOfWeek: currentWeek.length,
+        });
+      }
+      weeks.push(currentWeek);
+    }
+
+    return weeks;
+  }, [heatmapDays]);
+
+  // 9 Milestone Medals
+  const milestoneMedals = useMemo(() => {
+    return [
+      {
+        id: "spark",
+        name: "Spark",
+        category: "Streak",
+        desc: "Maintain a 3-day active writing streak.",
+        threshold: 3,
+        current: userStreak,
+        unlocked: userStreak >= 3,
+        icon: Flame,
+      },
+      {
+        id: "week_of_fire",
+        name: "Week of Fire",
+        category: "Streak",
+        desc: "Maintain a 7-day active writing streak.",
+        threshold: 7,
+        current: userStreak,
+        unlocked: userStreak >= 7,
+        icon: Flame,
+      },
+      {
+        id: "fortnight_flame",
+        name: "Fortnight Flame",
+        category: "Streak",
+        desc: "Maintain a 14-day active writing streak.",
+        threshold: 14,
+        current: userStreak,
+        unlocked: userStreak >= 14,
+        icon: Flame,
+      },
+      {
+        id: "month_of_fire",
+        name: "Month of Fire",
+        category: "Streak",
+        desc: "Maintain a 30-day active writing streak.",
+        threshold: 30,
+        current: userStreak,
+        unlocked: userStreak >= 30,
+        icon: Flame,
+      },
+      {
+        id: "first_essay",
+        name: "First Essay",
+        category: "Essays",
+        desc: "Complete your first timed writing evaluation.",
+        threshold: 1,
+        current: completedSubmissions.length,
+        unlocked: completedSubmissions.length >= 1,
+        icon: Award,
+      },
+      {
+        id: "dedicated_writer",
+        name: "Dedicated Writer",
+        category: "Essays",
+        desc: "Complete 10 full IELTS writing simulations.",
+        threshold: 10,
+        current: completedSubmissions.length,
+        unlocked: completedSubmissions.length >= 10,
+        icon: Trophy,
+      },
+      {
+        id: "band_7_achiever",
+        name: "Band 7.0+ Achiever",
+        category: "Band",
+        desc: "Score Band 7.0 or higher on an official test.",
+        threshold: 7.0,
+        current: highestBand,
+        unlocked: highestBand >= 7.0,
+        icon: Star,
+      },
+      {
+        id: "band_8_master",
+        name: "Band 8.0+ Master",
+        category: "Band",
+        desc: "Score Band 8.0 or higher on an official test.",
+        threshold: 8.0,
+        current: highestBand,
+        unlocked: highestBand >= 8.0,
+        icon: Crown,
+      },
+      {
+        id: "vocabulary_builder",
+        name: "Vocabulary Builder",
+        category: "Vocabulary",
+        desc: "Save 20 study takeaways or vocabulary cards.",
+        threshold: 20,
+        current: totalWordsSaved,
+        unlocked: totalWordsSaved >= 20,
+        icon: BookOpen,
+      },
+    ];
+  }, [userStreak, completedSubmissions.length, highestBand, totalWordsSaved]);
 
   // 14. Practice categories list
   const categories = useMemo(() => {
@@ -974,6 +1296,144 @@ export default function StudentDashboard() {
                     </div>
                   </div>
 
+                  {/* Band Progress Trend Line Chart */}
+                  <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-accent" />
+                          <span>Band Progress Trend</span>
+                        </h2>
+                        <p className="text-xs text-muted mt-0.5">
+                          Official Cambridge overall band trajectory over time
+                        </p>
+                      </div>
+
+                      {chronologicalTrend.length >= 2 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-accent/10 text-accent">
+                            Latest: <strong>Band {chronologicalTrend[chronologicalTrend.length - 1].band.toFixed(1)}</strong>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {chronologicalTrend.length < 2 ? (
+                      <div className="p-8 rounded-2xl glass-panel border border-border text-center flex flex-col items-center justify-center">
+                        <TrendingUp className="w-8 h-8 text-muted mb-2 opacity-60" />
+                        <h4 className="font-bold text-foreground text-sm">Your trend appears after two tests</h4>
+                        <p className="text-muted text-xs mt-1 max-w-sm">
+                          Complete at least 2 full writing simulations to visualize your Band Score trajectory and criterion progress over time.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setActiveTab("practice");
+                            setPracticeFolder("all");
+                          }}
+                          className="mt-3 px-3.5 py-1.5 rounded-xl bg-accent text-white font-semibold text-xs shadow-sm hover:bg-accent-hover transition-colors"
+                        >
+                          Start Next Test
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 pt-2">
+                        {/* SVG Trend Line */}
+                        <div className="relative h-40 w-full">
+                          <svg className="w-full h-full overflow-visible" viewBox="0 0 500 120" preserveAspectRatio="none">
+                            {/* Grid Lines for Band 6.0, 7.0, 8.0, 9.0 */}
+                            {[
+                              { band: 9, y: 10 },
+                              { band: 8, y: 35 },
+                              { band: 7, y: 60 },
+                              { band: 6, y: 85 },
+                            ].map((g) => (
+                              <g key={g.band}>
+                                <line
+                                  x1="0"
+                                  y1={g.y}
+                                  x2="500"
+                                  y2={g.y}
+                                  stroke="currentColor"
+                                  className="text-border/40"
+                                  strokeDasharray="3 3"
+                                  strokeWidth="1"
+                                />
+                                <text
+                                  x="4"
+                                  y={g.y - 3}
+                                  className="text-[9px] fill-muted font-mono"
+                                >
+                                  Band {g.band}.0
+                                </text>
+                              </g>
+                            ))}
+
+                            {/* Gradient Area & Line Path */}
+                            {(() => {
+                              const minBand = 5.0;
+                              const maxBand = 9.0;
+                              const pts = chronologicalTrend.map((t, idx) => {
+                                const x = (idx / (chronologicalTrend.length - 1)) * 480 + 10;
+                                const y = 110 - ((t.band - minBand) / (maxBand - minBand)) * 95;
+                                return { x, y, data: t };
+                              });
+
+                              const pathD = pts.reduce(
+                                (acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${p.x} ${p.y}`,
+                                ""
+                              );
+
+                              const areaD = `${pathD} L ${pts[pts.length - 1].x} 115 L ${pts[0].x} 115 Z`;
+
+                              return (
+                                <>
+                                  <defs>
+                                    <linearGradient id="studentTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="0%" stopColor="#E31837" stopOpacity="0.25" />
+                                      <stop offset="100%" stopColor="#E31837" stopOpacity="0.0" />
+                                    </linearGradient>
+                                  </defs>
+                                  <path d={areaD} fill="url(#studentTrendGrad)" />
+                                  <path
+                                    d={pathD}
+                                    fill="none"
+                                    stroke="#E31837"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  {pts.map((p, idx) => (
+                                    <g key={idx} className="group cursor-pointer">
+                                      <circle
+                                        cx={p.x}
+                                        cy={p.y}
+                                        r="4.5"
+                                        fill="#E31837"
+                                        stroke="var(--background)"
+                                        strokeWidth="2"
+                                        className="transition-transform group-hover:scale-150"
+                                      />
+                                      <title>{`${p.data.title}: Band ${p.data.band} (${new Date(p.data.date).toLocaleDateString()})`}</title>
+                                    </g>
+                                  ))}
+                                </>
+                              );
+                            })()}
+                          </svg>
+                        </div>
+
+                        {/* X-axis indicators */}
+                        <div className="flex items-center justify-between text-[10px] text-muted pt-2 border-t border-border">
+                          <span>First: {new Date(chronologicalTrend[0].date).toLocaleDateString()}</span>
+                          <span className="font-semibold text-foreground">
+                            {chronologicalTrend.length} Tests Evaluated
+                          </span>
+                          <span>Latest: {new Date(chronologicalTrend[chronologicalTrend.length - 1].date).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Recent Completed Submissions Feed */}
                   <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
                     <div className="flex items-center justify-between">
@@ -1048,10 +1508,215 @@ export default function StudentDashboard() {
                       </div>
                     )}
                   </div>
+
+                  {/* 2026 Activity Heatmap Grid */}
+                  <div className="glass-card rounded-3xl p-6 border border-border space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div>
+                        <h2 className="text-base font-bold font-heading text-foreground flex items-center gap-2">
+                          <CalendarIcon className="w-4 h-4 text-accent" />
+                          <span>2026 Activity Heatmap</span>
+                        </h2>
+                        <p className="text-xs text-muted mt-0.5">
+                          Consistent writing habit tracker across 2026
+                        </p>
+                      </div>
+
+                      {/* Toggle: Tests vs Study time */}
+                      <div className="p-1 rounded-xl glass-panel border border-border flex items-center gap-1 text-xs font-semibold">
+                        <button
+                          onClick={() => setHeatmapMetric("tests")}
+                          className={`px-3 py-1 rounded-lg transition-all ${
+                            heatmapMetric === "tests"
+                              ? "bg-[#E31837] text-white shadow-sm"
+                              : "text-muted hover:text-foreground"
+                          }`}
+                        >
+                          Tests
+                        </button>
+                        <button
+                          onClick={() => setHeatmapMetric("time")}
+                          className={`px-3 py-1 rounded-lg transition-all ${
+                            heatmapMetric === "time"
+                              ? "bg-[#E31837] text-white shadow-sm"
+                              : "text-muted hover:text-foreground"
+                          }`}
+                        >
+                          Study time
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Heatmap Grid Container */}
+                    <div className="overflow-x-auto pb-2">
+                      <div className="min-w-[680px] space-y-1.5">
+                        {/* Month Header */}
+                        <div className="flex text-[10px] font-semibold text-muted pl-6">
+                          {[
+                            { name: "Jan", col: 0 },
+                            { name: "Feb", col: 4 },
+                            { name: "Mar", col: 8 },
+                            { name: "Apr", col: 13 },
+                            { name: "May", col: 17 },
+                            { name: "Jun", col: 21 },
+                            { name: "Jul", col: 26 },
+                            { name: "Aug", col: 30 },
+                            { name: "Sep", col: 35 },
+                            { name: "Oct", col: 39 },
+                            { name: "Nov", col: 43 },
+                            { name: "Dec", col: 48 },
+                          ].map((m, idx) => (
+                            <div key={idx} className="w-[54px] text-left truncate">
+                              {m.name}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Grid with Day of week indicators */}
+                        <div className="flex gap-1.5 items-start">
+                          <div className="flex flex-col gap-1 text-[9px] font-bold text-muted uppercase tracking-tighter w-4 pt-0.5">
+                            <span className="h-3 leading-3">S</span>
+                            <span className="h-3 leading-3 opacity-0">M</span>
+                            <span className="h-3 leading-3">T</span>
+                            <span className="h-3 leading-3 opacity-0">W</span>
+                            <span className="h-3 leading-3">T</span>
+                            <span className="h-3 leading-3 opacity-0">F</span>
+                            <span className="h-3 leading-3">S</span>
+                          </div>
+
+                          <div className="flex gap-1">
+                            {heatmapWeeks.map((week, wIdx) => (
+                              <div key={wIdx} className="flex flex-col gap-1">
+                                {week.map((day, dIdx) => {
+                                  let colorClass = "invisible";
+                                  if (day.count !== -1) {
+                                    if (heatmapMetric === "tests") {
+                                      if (day.count === 0) colorClass = "bg-surfaceSecondary/60 dark:bg-white/5 border border-border/40";
+                                      else if (day.count === 1) colorClass = "bg-[#E31837]/30 border border-[#E31837]/40";
+                                      else if (day.count === 2) colorClass = "bg-[#E31837]/60 border border-[#E31837]/70";
+                                      else colorClass = "bg-[#E31837] border border-[#BE123C] shadow-sm shadow-[#E31837]/40";
+                                    } else {
+                                      if (day.minutes === 0) colorClass = "bg-surfaceSecondary/60 dark:bg-white/5 border border-border/40";
+                                      else if (day.minutes <= 25) colorClass = "bg-[#E31837]/30 border border-[#E31837]/40";
+                                      else if (day.minutes <= 45) colorClass = "bg-[#E31837]/60 border border-[#E31837]/70";
+                                      else colorClass = "bg-[#E31837] border border-[#BE123C] shadow-sm shadow-[#E31837]/40";
+                                    }
+                                  }
+
+                                  return (
+                                    <div
+                                      key={dIdx}
+                                      onMouseEnter={() => {
+                                        if (day.date) {
+                                          setHoveredHeatmapDay({
+                                            date: day.date,
+                                            count: day.count,
+                                            minutes: day.minutes,
+                                          });
+                                        }
+                                      }}
+                                      onMouseLeave={() => setHoveredHeatmapDay(null)}
+                                      className={`w-3 h-3 rounded-[3px] transition-all cursor-pointer ${colorClass}`}
+                                      title={
+                                        day.date
+                                          ? `${day.date}: ${day.count} test${day.count === 1 ? "" : "s"} (${day.minutes}m)`
+                                          : ""
+                                      }
+                                    />
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Heatmap Footer Legend & Hover Details */}
+                        <div className="pt-3 border-t border-border flex items-center justify-between text-xs text-muted flex-wrap gap-2">
+                          <div className="text-[11px] font-medium">
+                            {hoveredHeatmapDay ? (
+                              <span className="text-foreground">
+                                <strong>{hoveredHeatmapDay.date}</strong> &bull;{" "}
+                                <span className="text-accent font-semibold">{hoveredHeatmapDay.count} tests</span> ({hoveredHeatmapDay.minutes} mins studied)
+                              </span>
+                            ) : (
+                              <span>Hover over any day to see details</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <span>Less</span>
+                            <div className="w-2.5 h-2.5 rounded-sm bg-surfaceSecondary/60 border border-border/40" />
+                            <div className="w-2.5 h-2.5 rounded-sm bg-[#E31837]/30" />
+                            <div className="w-2.5 h-2.5 rounded-sm bg-[#E31837]/60" />
+                            <div className="w-2.5 h-2.5 rounded-sm bg-[#E31837]" />
+                            <span>More</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Right 1 Column: Mini Calendar & Today's Timeline */}
                 <div className="space-y-6">
+                  {/* "Your Week" 7-Day Bar Chart */}
+                  <div className="glass-card rounded-3xl p-5 border border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold font-heading text-sm text-foreground flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-accent" />
+                        <span>Your Week</span>
+                      </h3>
+                      <span className="text-[11px] font-semibold text-muted">
+                        Last 7 Days
+                      </span>
+                    </div>
+
+                    {/* 7 Vertical Bars */}
+                    <div className="flex items-end justify-between gap-2 pt-4 pb-2 px-1 h-32">
+                      {weekDaysData.map((d, idx) => {
+                        const maxMins = Math.max(60, ...weekDaysData.map((w) => w.minutes));
+                        const heightPct = Math.max(8, Math.min(100, Math.round((d.minutes / maxMins) * 100)));
+                        return (
+                          <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                            {/* Duration label */}
+                            <span className="text-[9px] font-mono text-muted group-hover:text-foreground font-semibold">
+                              {d.minutes > 0 ? `${d.minutes}m` : "—"}
+                            </span>
+
+                            {/* Bar */}
+                            <div className="w-full bg-surfaceSecondary rounded-t-lg overflow-hidden h-full flex items-end">
+                              <div
+                                className={`w-full rounded-t-lg transition-all duration-500 ${
+                                  d.isToday
+                                    ? "bg-[#E31837] shadow-sm shadow-[#E31837]/40"
+                                    : d.minutes > 0
+                                    ? "bg-[#E31837]/60 hover:bg-[#E31837]"
+                                    : "bg-transparent"
+                                }`}
+                                style={{ height: `${d.minutes > 0 ? heightPct : 0}%` }}
+                              />
+                            </div>
+
+                            {/* Day label */}
+                            <span
+                              className={`text-[10px] font-bold ${
+                                d.isToday ? "text-accent" : "text-muted"
+                              }`}
+                            >
+                              {d.dayLabel}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted">
+                      <span>Weekly Volume:</span>
+                      <strong className="text-foreground">
+                        {weekDaysData.reduce((acc, d) => acc + d.minutes, 0)} mins practiced
+                      </strong>
+                    </div>
+                  </div>
                   {/* Interactive Mini Calendar Widget */}
                   <div className="glass-card rounded-3xl p-5 border border-border space-y-4">
                     <div className="flex items-center justify-between">
@@ -1766,88 +2431,144 @@ export default function StudentDashboard() {
           ------------------------------------------------------------------- */}
           {activeTab === "achievements" && (
             <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
-                  Academic Milestones &amp; Badges
-                </h1>
-                <p className="text-xs sm:text-sm text-muted mt-0.5">
-                  Milestones automatically verified against your genuine TiDB exam record.
-                </p>
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
+                    Academic Milestones &amp; Badges
+                  </h1>
+                  <p className="text-xs sm:text-sm text-muted mt-0.5">
+                    Milestones automatically verified against your genuine TiDB database exam record.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-accent/10 text-accent border border-accent/20">
+                    {milestoneMedals.filter((m) => m.unlocked).length} / {milestoneMedals.length} Medals Unlocked
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {[
-                  {
-                    title: "First Step",
-                    desc: "Completed your first simulated exam under lockdown.",
-                    unlocked: completedSubmissions.length >= 1,
-                    icon: Trophy,
-                  },
-                  {
-                    title: "Integrity Master",
-                    desc: "Maintained a pristine 100% exam merit integrity score.",
-                    unlocked: meritScore === 100,
-                    icon: Shield,
-                  },
-                  {
-                    title: "Band 7+ Club",
-                    desc: "Achieved an overall score of Band 7.0 or higher.",
-                    unlocked: completedSubmissions.some((s) => s.overall_band >= 7.0),
-                    icon: Award,
-                  },
-                  {
-                    title: "Task 1 Specialist",
-                    desc: "Completed an Academic Data / Visual Chart test.",
-                    unlocked: task1Completed.length >= 1,
-                    icon: Target,
-                  },
-                  {
-                    title: "Task 2 Philosopher",
-                    desc: "Completed a 40-minute Discursive Essay simulation.",
-                    unlocked: task2Completed.length >= 1,
-                    icon: Brain,
-                  },
-                  {
-                    title: "Dedicated Scholar",
-                    desc: "Completed 3 or more exam simulations.",
-                    unlocked: completedSubmissions.length >= 3,
-                    icon: Flame,
-                  },
-                ].map((ach, idx) => {
-                  const Icon = ach.icon;
+              {/* Top Verified Metrics Banner (4 Cards) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="glass-card rounded-2xl p-4 border border-border flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+                    <Flame className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Writing Streak</span>
+                    <strong className="text-lg font-extrabold font-heading text-foreground block">
+                      {userStreak} {userStreak === 1 ? "Day" : "Days"}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="glass-card rounded-2xl p-4 border border-border flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Essays Tested</span>
+                    <strong className="text-lg font-extrabold font-heading text-foreground block">
+                      {completedSubmissions.length} Tests
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="glass-card rounded-2xl p-4 border border-border flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Highest Band</span>
+                    <strong className="text-lg font-extrabold font-heading text-emerald-500 block">
+                      {highestBand ? `Band ${highestBand.toFixed(1)}` : "—"}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="glass-card rounded-2xl p-4 border border-border flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Words Saved</span>
+                    <strong className="text-lg font-extrabold font-heading text-purple-500 block">
+                      {totalWordsSaved} Takeaways
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 9 Medals 3x3 Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {milestoneMedals.map((m) => {
+                  const Icon = m.icon;
+                  const progressPct = Math.min(100, Math.round((m.current / m.threshold) * 100));
                   return (
                     <div
-                      key={idx}
+                      key={m.id}
                       className={`glass-card rounded-2xl p-5 border transition-all flex flex-col justify-between ${
-                        ach.unlocked
+                        m.unlocked
                           ? "border-accent/40 bg-accent/5 shadow-sm"
-                          : "border-border opacity-50 grayscale"
+                          : "border-border/60 bg-surfaceSecondary/20 opacity-75"
                       }`}
                     >
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div
                             className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              ach.unlocked
-                                ? "bg-accent/15 text-accent"
+                              m.unlocked
+                                ? "bg-accent/15 text-accent shadow-sm"
                                 : "bg-surfaceSecondary text-muted"
                             }`}
                           >
                             <Icon className="w-5 h-5" />
                           </div>
-                          {ach.unlocked && (
+
+                          {m.unlocked ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1">
                               <Check className="w-3 h-3" />
-                              Unlocked
+                              <span>Unlocked</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surfaceSecondary text-muted flex items-center gap-1">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>Locked</span>
                             </span>
                           )}
                         </div>
+
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-surfaceSecondary text-muted">
+                            {m.category}
+                          </span>
+                        </div>
+
                         <h3 className="font-bold font-heading text-sm text-foreground">
-                          {ach.title}
+                          {m.name}
                         </h3>
                         <p className="text-xs text-muted mt-1 leading-relaxed">
-                          {ach.desc}
+                          {m.desc}
                         </p>
+                      </div>
+
+                      {/* Progress Bar for Locked / Completed for Unlocked */}
+                      <div className="mt-4 pt-3 border-t border-border/60">
+                        <div className="flex items-center justify-between text-[10px] font-semibold mb-1">
+                          <span className="text-muted">Progress</span>
+                          <span className={m.unlocked ? "text-emerald-500" : "text-muted"}>
+                            {m.current} / {m.threshold}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-surfaceSecondary overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              m.unlocked ? "bg-emerald-500" : "bg-accent/70"
+                            }`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -2088,6 +2809,90 @@ export default function StudentDashboard() {
 
                     <div>
                       <label className="block font-semibold text-foreground mb-1.5">
+                        Username Handle
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 text-muted font-mono font-bold text-xs pointer-events-none">
+                          @
+                        </span>
+                        <input
+                          type="text"
+                          value={editUsername}
+                          onChange={(e) =>
+                            setEditUsername(
+                              e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9_]/g, "")
+                                .slice(0, 30)
+                            )
+                          }
+                          placeholder="yourhandle"
+                          className="w-full pl-7 pr-3 py-2.5 rounded-xl glass-input text-xs font-mono font-semibold"
+                        />
+                      </div>
+                      <span className="text-[10px] text-muted mt-1 block">
+                        Letters, numbers, and underscores only (3-30 chars).
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1.5">
+                        Bio / IELTS Target
+                      </label>
+                      <textarea
+                        value={editBio}
+                        onChange={(e) => setEditBio(e.target.value.slice(0, 500))}
+                        rows={2}
+                        placeholder="e.g. Aiming for Band 8.0 in Academic Writing &bull; Computer Science Aspirant"
+                        className="w-full p-2.5 rounded-xl glass-input text-xs resize-none"
+                      />
+                      <span className="text-[10px] text-muted mt-0.5 block text-right">
+                        {editBio.length} / 500 characters
+                      </span>
+                    </div>
+
+                    {/* Public Profile Privacy Toggle */}
+                    <div className="p-3.5 rounded-2xl bg-surfaceSecondary/50 border border-border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5 pr-2">
+                          <span className="font-bold text-foreground block text-xs">
+                            Make Profile Public
+                          </span>
+                          <p className="text-[11px] text-muted leading-relaxed">
+                            Allow peers and mentors to view your verified 2026 activity heatmap, streak, and milestone badges.
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={editIsProfilePublic}
+                            onChange={(e) => setEditIsProfilePublic(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-surfaceSecondary border border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#E31837]" />
+                        </label>
+                      </div>
+
+                      {/* Direct Link to Profile */}
+                      {(username || editUsername) && (
+                        <div className="pt-2 border-t border-border/60 flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-muted truncate">
+                            /u/{username || editUsername}
+                          </span>
+                          <Link
+                            href={`/u/${username || editUsername}`}
+                            target="_blank"
+                            className="text-[11px] font-bold text-accent hover:underline flex items-center gap-1 shrink-0"
+                          >
+                            <span>View Public Page</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1.5">
                         Email Address
                       </label>
                       <input
@@ -2101,7 +2906,7 @@ export default function StudentDashboard() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="grid grid-cols-2 gap-3 pt-1">
                       <div className="p-3 rounded-xl bg-surfaceSecondary border border-border">
                         <span className="text-[10px] text-muted block">Exam Merit Score</span>
                         <strong className="text-sm font-bold text-emerald-500">
@@ -2115,6 +2920,12 @@ export default function StudentDashboard() {
                         </strong>
                       </div>
                     </div>
+
+                    {settingsError && (
+                      <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20 text-xs font-semibold">
+                        {settingsError}
+                      </div>
+                    )}
 
                     <button
                       onClick={handleSaveSettings}

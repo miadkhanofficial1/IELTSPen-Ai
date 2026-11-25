@@ -15,7 +15,7 @@ export async function GET() {
 
     // 1. User Profile
     const profile = await queryOne<any>(
-      "SELECT id, full_name, email, role, native_language, merit_score, locked_until, created_at FROM users WHERE id = ?",
+      "SELECT id, full_name, email, username, role, native_language, merit_score, is_profile_public, bio, locked_until, created_at FROM users WHERE id = ?",
       [session.userId]
     );
 
@@ -52,20 +52,35 @@ export async function GET() {
       [session.userId]
     );
 
+    // 6. User Achievements from database
+    const rawAchievements = await query<any>(
+      "SELECT * FROM user_achievements WHERE user_id = ? ORDER BY unlocked_at DESC",
+      [session.userId]
+    );
+
     return NextResponse.json({
       success: true,
-      profile: profile || {
-        id: session.userId,
-        full_name: session.fullName,
-        email: session.email,
-        role: session.role,
-        native_language: session.nativeLanguage || "English",
-        merit_score: 100,
-        locked_until: null,
-      },
+      profile: profile
+        ? {
+            ...profile,
+            is_profile_public: profile.is_profile_public === 1 || profile.is_profile_public === true || profile.is_profile_public === "1",
+          }
+        : {
+            id: session.userId,
+            full_name: session.fullName,
+            email: session.email,
+            username: session.email?.split("@")[0]?.toLowerCase()?.replace(/[^a-z0-9_]/g, "") || "student",
+            role: session.role,
+            native_language: session.nativeLanguage || "English",
+            merit_score: 100,
+            is_profile_public: true,
+            bio: null,
+            locked_until: null,
+          },
       globalAnnouncement: settings?.global_announcement || null,
       tasks,
       submissions,
+      achievements: rawAchievements || [],
       activeAppeal: activeAppeal || null,
     });
   } catch (error: any) {
@@ -74,7 +89,7 @@ export async function GET() {
   }
 }
 
-// POST: Update student profile preference (e.g. native language)
+// POST: Update student profile preference (e.g. native language, full name, username, bio, visibility)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession();
@@ -82,13 +97,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { nativeLanguage, fullName } = await request.json();
+    const body = await request.json();
+    const { nativeLanguage, fullName, username, bio, isProfilePublic } = body;
+
+    // Validate username if provided
+    if (username !== undefined && username !== null) {
+      const cleanUsername = String(username).trim().toLowerCase();
+      if (cleanUsername.length > 0) {
+        if (!/^[a-z0-9_]{3,30}$/.test(cleanUsername)) {
+          return NextResponse.json(
+            { error: "Username must be 3-30 characters and contain only letters, numbers, and underscores." },
+            { status: 400 }
+          );
+        }
+
+        // Check if taken by another user
+        const existing = await queryOne<any>(
+          "SELECT id FROM users WHERE username = ? AND id != ?",
+          [cleanUsername, session.userId]
+        );
+        if (existing) {
+          return NextResponse.json(
+            { error: "This username is already taken. Please choose another one." },
+            { status: 409 }
+          );
+        }
+
+        await execute("UPDATE users SET username = ? WHERE id = ?", [cleanUsername, session.userId]);
+      }
+    }
+
     if (nativeLanguage) {
       await execute("UPDATE users SET native_language = ? WHERE id = ?", [
         nativeLanguage,
         session.userId,
       ]);
     }
+
     if (fullName && typeof fullName === "string" && fullName.trim()) {
       await execute("UPDATE users SET full_name = ? WHERE id = ?", [
         fullName.trim(),
@@ -96,7 +141,26 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
-    return NextResponse.json({ success: true, nativeLanguage, fullName });
+    if (bio !== undefined) {
+      const bioText = typeof bio === "string" ? bio.trim().slice(0, 500) : null;
+      await execute("UPDATE users SET bio = ? WHERE id = ?", [bioText, session.userId]);
+    }
+
+    if (isProfilePublic !== undefined) {
+      const isPublic = isProfilePublic ? 1 : 0;
+      await execute("UPDATE users SET is_profile_public = ? WHERE id = ?", [isPublic, session.userId]);
+    }
+
+    return NextResponse.json({
+      success: true,
+      updated: {
+        fullName,
+        nativeLanguage,
+        username,
+        bio,
+        isProfilePublic,
+      },
+    });
   } catch (error: any) {
     console.error("Error in /api/student/dashboard-data POST:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

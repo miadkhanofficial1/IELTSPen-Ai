@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
     full_name VARCHAR(191) NOT NULL DEFAULT '',
     email VARCHAR(191) NOT NULL UNIQUE,
+    username VARCHAR(64) NULL UNIQUE,
+    is_profile_public BOOLEAN NOT NULL DEFAULT TRUE,
+    bio TEXT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('student', 'admin') NOT NULL DEFAULT 'student',
     native_language VARCHAR(64) NOT NULL DEFAULT 'English',
@@ -17,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_users_email (email),
+    INDEX idx_users_username (username),
     INDEX idx_users_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

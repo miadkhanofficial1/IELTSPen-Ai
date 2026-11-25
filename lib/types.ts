@@ -76,12 +76,24 @@ export interface UserProfile {
   id: string;
   full_name: string;
   email: string;
+  username?: string | null;
   role: UserRole;
   native_language: string;
   merit_score: number;
+  is_profile_public?: boolean;
+  bio?: string | null;
   locked_until: string | null;
   created_at: string;
   updated_at?: string;
+}
+
+export interface UserAchievement {
+  id: string;
+  badge_id: string;
+  badge_name: string;
+  badge_category: "streak" | "essays" | "band" | "vocabulary";
+  badge_tier: "bronze" | "silver" | "gold" | "diamond";
+  unlocked_at: string;
 }
 
 export interface SystemSettings {
