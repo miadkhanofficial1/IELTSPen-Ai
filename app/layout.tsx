@@ -64,7 +64,7 @@ export default function RootLayout({
         <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
-      <body className="font-sans min-h-screen relative overflow-x-hidden transition-colors duration-300">
+      <body className="font-sans min-h-screen relative overflow-x-clip transition-colors duration-300">
         <ThemeProvider>
           {/* iOS Drifting Ambient Gradient Orbs */}
           <div className="ambient-glow-wrapper" aria-hidden="true">

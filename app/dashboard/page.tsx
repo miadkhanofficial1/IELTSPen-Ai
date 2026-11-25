@@ -1311,11 +1311,11 @@ export default function StudentDashboard() {
   }, [userName]);
 
   return (
-    <div className="flex min-h-screen bg-background selection:bg-accent/20 selection:text-accent">
+    <div className="flex min-h-screen w-full bg-background selection:bg-accent/20 selection:text-accent relative">
       {/* =========================================================================
-          1. STICKY FULL-HEIGHT FROSTED GLASS LEFT SIDEBAR
+          1. FIXED FULL-HEIGHT FROSTED GLASS LEFT SIDEBAR
       ========================================================================= */}
-      <aside className="sticky top-0 h-screen shrink-0 w-64 glass-nav flex flex-col justify-between overflow-y-auto border-r border-border z-30">
+      <aside className="fixed inset-y-0 left-0 w-64 h-screen shrink-0 glass-nav flex flex-col justify-between overflow-y-auto border-r border-border z-30 bg-surface/90 backdrop-blur-xl">
         <div className="flex flex-col">
           {/* Top Brand Logo Block: Clean Left-Aligned with proper padding and border-b */}
           <div className="px-5 pt-5 pb-4 border-b border-border/60">
@@ -1533,7 +1533,7 @@ export default function StudentDashboard() {
       {/* =========================================================================
           2. MAIN STUDENT WORKSPACE
       ========================================================================= */}
-      <div className="flex-1 min-w-0 flex flex-col justify-between">
+      <div className="pl-64 flex-1 min-w-0 flex flex-col justify-between min-h-screen w-full">
         {/* Top Announcement & Security Lockout Banners */}
         <div>
           {/* Global Platform Announcement */}
